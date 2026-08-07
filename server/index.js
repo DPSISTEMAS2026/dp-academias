@@ -1,0 +1,2299 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
+import cron from 'node-cron';
+import { DateTime } from 'luxon';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+import { createClient } from '@supabase/supabase-js';
+const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_ANON_KEY || '');
+
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Mercado Pago Configuration (Fallback global client)
+const client = new MercadoPagoConfig({
+    accessToken: process.env.VITE_MP_ACCESS_TOKEN || '',
+    options: { timeout: 5000 }
+});
+
+// Helper to get Mercado Pago Config dynamically per Sede
+async function getMPClientForSede(sedeId) {
+    if (sedeId) {
+        try {
+            const { data: sedeRecord, error } = await supabase
+                .from('sedes')
+                .select('mp_access_token')
+                .eq('id', Number(sedeId))
+                .maybeSingle();
+
+            if (!error && sedeRecord && sedeRecord.mp_access_token) {
+                return new MercadoPagoConfig({
+                    accessToken: sedeRecord.mp_access_token,
+                    options: { timeout: 5000 }
+                });
+            }
+        } catch (e) {
+            console.error(`[MP-CLIENT] Error fetching token for Sede ${sedeId}:`, e.message);
+        }
+    }
+    // Si es la Sede 1 (Concepción), permitimos el fallback a las credenciales globales (Manuel)
+    if (Number(sedeId) === 1) {
+        return client;
+    }
+    // Para cualquier otra sede, si no tiene tokens configurados, NO permitimos pagar (retornamos null)
+    return null;
+}
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Paths to "Database"
+const dbPath = path.join(__dirname, 'data');
+if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath);
+
+const uploadsDir = path.join(dbPath, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+
+const studentsFile = path.join(dbPath, 'students.json');
+const videosFile = path.join(dbPath, 'videos.json');
+const newsFile = path.join(dbPath, 'news.json');
+const galleryFile = path.join(dbPath, 'gallery.json');
+const heroVideosFile = path.join(dbPath, 'heroVideos.json');
+const noticeFile = path.join(dbPath, 'global_notice.json');
+
+// Servir archivos estáticos de subidas
+app.use('/uploads', express.static(uploadsDir));
+
+// Endpoint de subida directo por Stream (sin multer)
+app.post('/api/upload', (req, res) => {
+    try {
+        const originalName = req.headers['x-filename'] || `upload_${Date.now()}`;
+        // Sanitizar el nombre de archivo o usar timestamp para evitar colisiones
+        const ext = path.extname(originalName) || '.mp4';
+        const sanitizedName = `file_${Date.now()}${ext}`;
+        const filePath = path.join(uploadsDir, sanitizedName);
+        
+        const fileStream = fs.createWriteStream(filePath);
+        req.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+            res.status(201).json({ url: `/uploads/${sanitizedName}` });
+        });
+
+        fileStream.on('error', (err) => {
+            res.status(500).json({ error: err.message });
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Helpers to read/write JSON
+const readData = (file) => {
+    if (!fs.existsSync(file)) {
+        return null; // Return null to indicate "no file" vs "empty array"
+    }
+    const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    return data;
+};
+
+const writeData = (file, data) => {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+};
+
+// --- ROUTES ---
+
+// Admin Payments Lookup
+app.get('/api/admin/payments', async (req, res) => {
+    try {
+        const { year = '2026', month = '02', sedeId } = req.query;
+        const mpClient = await getMPClientForSede(sedeId);
+        if (!mpClient) {
+            return res.status(400).json({ error: 'Mercado Pago no está configurado para esta sede.' });
+        }
+        const mpPayment = new Payment(mpClient);
+        
+        const nextMonth = Number(month) === 12 ? 1 : Number(month) + 1;
+        const nextYear = Number(month) === 12 ? Number(year) + 1 : Number(year);
+        
+        const beginDate = `${year}-${String(month).padStart(2,'0')}-01T00:00:00.000Z`;
+        const endDate = `${nextYear}-${String(nextMonth).padStart(2,'0')}-01T00:00:00.000Z`;
+
+        const result = await mpPayment.search({
+            options: {
+                range: 'date_created',
+                begin_date: beginDate,
+                end_date: endDate,
+                limit: 1000
+            }
+        });
+
+        // Cargar alumnos para el cruce desde Supabase
+        let query = supabase.from('students').select('id, name, email');
+        if (sedeId) {
+            query = query.eq('sede_id', Number(sedeId));
+        }
+        const { data: dbStudents, error: dbError } = await query;
+        if (dbError) throw dbError;
+        const students = dbStudents || [];
+
+        const payments = result.results || [];
+        const matched = [];
+        const unmatched = [];
+        const expenses = [];
+
+        payments.forEach(p => {
+            const payerEmail = p.payer?.email?.toLowerCase() || '';
+            const description = p.description?.toLowerCase() || '';
+            
+            // 1. Detectar si es un gasto obvio (compras en comercios)
+            const isGasto = description.includes('copec') || 
+                            description.includes('lider') || 
+                            description.includes('panaderia') || 
+                            description.includes('parking') || 
+                            description.includes('experiencia gourmet') ||
+                            description.includes('sb ');
+
+            if (isGasto) {
+                expenses.push({
+                    id: p.id,
+                    date: p.date_created,
+                    amount: p.transaction_amount,
+                    description: p.description
+                });
+                return;
+            }
+
+            // 2. Intentar cruce por Email
+            let student = students.find(s => s.email?.toLowerCase() === payerEmail);
+            
+            // 3. Intentar cruce por nombre incluido en la descripción
+            if (!student) {
+                student = students.find(s => s.name && description.includes(s.name.toLowerCase()));
+            }
+
+            // 4. Intentar cruce por ID en la descripción (evitando falsos positivos ej. separar 73 de 173, pero permitiendo ID73)
+            if (!student) {
+                student = students.find(s => s.id && new RegExp(`(^|\\D)${s.id}(\\D|$)`).test(description));
+            }
+
+            if (student) {
+                matched.push({
+                    studentName: student.name,
+                    id: p.id,
+                    date: p.date_created,
+                    amount: p.transaction_amount,
+                    description: p.description,
+                    payer: p.payer?.email || 'No email'
+                });
+            } else {
+                unmatched.push({
+                    id: p.id,
+                    date: p.date_created,
+                    amount: p.transaction_amount,
+                    description: p.description,
+                    payer: p.payer?.email || 'No email'
+                });
+            }
+        });
+
+        res.json({
+            success: true,
+            range: { beginDate, endDate },
+            summary: {
+                total: payments.length,
+                matched: matched.length,
+                unmatched_income: unmatched.length,
+                expenses: expenses.length
+            },
+            matched,
+            unmatched_income: unmatched,
+            expenses
+        });
+
+    } catch (error) {
+        console.error("Admin Payments Lookup Failed:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Videos
+app.get('/api/videos', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        let query = supabase.from('videos').select('*');
+        if (targetSedeId) {
+            query = query.or(`sede_id.eq.${targetSedeId},sede_id.is.null`);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        const formatted = (data || []).map(v => ({
+            id: v.id,
+            title: v.title,
+            description: v.description,
+            url: v.url,
+            thumbnail: v.thumbnail,
+            beltLevel: v.beltlevel,
+            category: v.category,
+            sedeId: v.sede_id
+        }));
+        res.json(formatted);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/videos', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : (req.body.sedeId ? Number(req.body.sedeId) : null);
+        const newId = Date.now().toString();
+        const newVideo = { 
+            id: newId,
+            title: req.body.title,
+            description: req.body.description,
+            url: req.body.url,
+            thumbnail: req.body.thumbnail,
+            beltlevel: req.body.beltLevel,
+            category: req.body.category,
+            sede_id: targetSedeId
+        };
+        const { error } = await supabase.from('videos').insert(newVideo);
+        if (error) throw error;
+        res.status(201).json({ ...req.body, id: newId, sedeId: targetSedeId });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/videos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase.from('videos').delete().eq('id', id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// News
+app.get('/api/news', async (req, res) => {
+    try {
+        let query = supabase.from('news')
+            .select('*')
+            .not('title', 'like', 'SYSTEM_%')
+            .lt('id', 999900);
+        if (req.query.sedeId) {
+            query = query.or(`sede_id.eq.${req.query.sedeId},sede_id.is.null`);
+        }
+        query = query.order('id', { ascending: true });
+        const { data, error } = await query;
+        if (error) throw error;
+        res.json(data || []);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/news', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        // Borrar noticias previas, protegiendo las configuraciones de sistema (SYSTEM_*) y las tarjetas de cumpleaños (ID >= 999900)
+        let deleteQuery = supabase.from('news')
+            .delete()
+            .neq('id', 999999)
+            .not('title', 'like', 'SYSTEM_%')
+            .lt('id', 999900);
+        
+        if (targetSedeId) {
+            deleteQuery = deleteQuery.eq('sede_id', targetSedeId);
+        } else {
+            deleteQuery = deleteQuery.is('sede_id', null);
+        }
+        await deleteQuery;
+
+        const newsBody = Array.isArray(req.body) ? req.body : [req.body];
+        const newsWithSede = newsBody.map(item => ({
+            ...item,
+            sede_id: targetSedeId
+        }));
+
+        const { error } = await supabase.from('news').insert(newsWithSede);
+        if (error) throw error;
+        res.status(200).json(req.body);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Gallery
+app.get('/api/gallery', async (req, res) => {
+    try {
+        let query = supabase.from('gallery').select('*');
+        if (req.query.sedeId) {
+            query = query.or(`sede_id.eq.${req.query.sedeId},sede_id.is.null`);
+        }
+        query = query.order('id', { ascending: true });
+        const { data, error } = await query;
+        if (error) throw error;
+        res.json(data || []);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/gallery', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        let deleteQuery = supabase.from('gallery').delete().neq('id', 0);
+        if (targetSedeId) {
+            deleteQuery = deleteQuery.eq('sede_id', targetSedeId);
+        } else {
+            deleteQuery = deleteQuery.is('sede_id', null);
+        }
+        await deleteQuery;
+
+        const galleryBody = Array.isArray(req.body) ? req.body : [req.body];
+        const galleryWithSede = galleryBody.map(item => ({
+            ...item,
+            sede_id: targetSedeId
+        }));
+
+        const { error } = await supabase.from('gallery').insert(galleryWithSede);
+        if (error) throw error;
+        res.status(200).json(req.body);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Hero Videos (Keep local fallback or simple json read setup)
+app.get('/api/hero-videos', (req, res) => {
+    res.json(readData(heroVideosFile));
+});
+
+app.post('/api/hero-videos', (req, res) => {
+    writeData(heroVideosFile, req.body);
+    res.status(200).json(req.body);
+});
+
+// Students with automatic background sync
+app.get('/api/students', async (req, res) => {
+    try {
+        let query = supabase.from('students').select('*');
+        if (req.query.sedeId) {
+            query = query.eq('sede_id', Number(req.query.sedeId));
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+
+        // Logic: if lastpaymentdate + 28 days < today, set as unpaid
+        const now = new Date();
+        const updatedData = [];
+        let anyStatusChanged = false;
+
+        for (const s of data) {
+            let currentStatus = s.ispaid;
+            if (s.lastpaymentdate) {
+                const pDate = new Date(s.lastpaymentdate);
+                pDate.setDate(pDate.getDate() + 28);
+                if (now > pDate && currentStatus === true) {
+                    currentStatus = false;
+                    await supabase.from('students').update({ ispaid: false }).eq('id', s.id);
+                    anyStatusChanged = true;
+                }
+            }
+            updatedData.push({ ...s, ispaid: currentStatus });
+        }
+
+        // Logic: Birthdays auto-broadcast (using Chile timezone)
+        const chileDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+        const mm = String(chileDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(chileDate.getDate()).padStart(2, '0');
+        const searchDate = `-${mm}-${dd}`;
+        const birthdayStudents = updatedData.filter(s => s.birthdate && s.birthdate.includes(searchDate));
+        
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        const noticeId = 999900 + (targetSedeId || 99);
+
+        if (birthdayStudents.length > 0) {
+            const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
+            const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
+            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su Dojo Ranas! 🥋🐸`;
+            
+            // Verificamos si el aviso ya existe para hoy para evitar actualizaciones innecesarias
+            const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
+            if (!currentNotice || currentNotice.title !== subject || !currentNotice.date.includes(now.toISOString().split('T')[0])) {
+                await supabase.from('news').upsert({
+                    id: noticeId,
+                    title: subject,
+                    body: message,
+                    date: now.toISOString(),
+                    sede_id: targetSedeId
+                });
+            }
+        } else {
+            // Eliminar si no hay cumpleaños
+            const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
+            if (currentNotice && currentNotice.title.includes('Cumpleaños')) {
+                await supabase.from('news').delete().eq('id', noticeId);
+            }
+        }
+
+        const formatted = updatedData.map(s => {
+            const compEntry = Array.isArray(s.history) ? s.history.find(h => h && h._competition_info) : null;
+            const cleanHistory = Array.isArray(s.history) ? s.history.filter(h => h && !h._competition_info) : [];
+            const weightVal = (s.weight !== undefined && s.weight !== null) ? s.weight : (compEntry ? compEntry.weight : null);
+            const genderVal = s.gender ? s.gender : (compEntry ? compEntry.gender : null);
+
+            return {
+                id: s.id,
+                name: s.name,
+                email: s.email,
+                password: s.password,
+                phone: s.phone,
+                belt: s.belt || 'WHITE',
+                classesAttended: s.classesattended,
+                classesToNextBelt: s.classestonextbelt,
+                lastPaymentMonth: s.lastpaymentmonth,
+                lastPaymentDate: s.lastpaymentdate,
+                isPaid: s.ispaid === true,
+                plan: s.plan,
+                monthlyFee: s.monthlyfee,
+                avatar: s.avatar,
+                birthDate: s.birthdate,
+                history: cleanHistory,
+                terms_accepted: s.terms_accepted === true || s.terms_accepted === 'true' || s.terms_accepted === 1,
+                scheduledClasses: Array.isArray(s.scheduledclasses) ? s.scheduledclasses : [],
+                joinDate: s.joindate || null,
+                lastGrade: s.lastgrade || null,
+                graduationDate: s.graduationdate || null,
+                weight: weightVal,
+                gender: genderVal,
+                sedeId: s.sede_id || 1,
+                sede_id: s.sede_id || 1
+            };
+        });
+
+        res.json(formatted);
+        // syncStudentsBackground desactivado - sobreescribía cambios manuales del admin
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Función auxiliar para sincronización en segundo plano (últimos 6 meses)
+async function syncStudentsBackground(students) {
+    const mpPayment = new Payment(client);
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const now = new Date();
+
+    try {
+        const result = await mpPayment.search({
+            options: {
+                status: 'approved',
+                range: 'date_created',
+                begin_date: sixMonthsAgo.toISOString(),
+                end_date: now.toISOString(),
+                limit: 100
+            }
+        });
+
+        const payments = result.results || [];
+
+        for (let student of students) {
+            if (!student.email) continue;
+            
+            const studentEmail = student.email.toLowerCase();
+            const studentName = student.name.toLowerCase();
+
+            const matchedPayments = payments.filter(pay => {
+                 const payerEmail = pay.payer?.email?.toLowerCase() || '';
+                 const description = pay.description?.toLowerCase() || '';
+                 const idRegex = new RegExp(`(^|\\D)${student.id}(\\D|$)`);
+                 return payerEmail === studentEmail || description.includes(studentName) || idRegex.test(description);
+            });
+
+            if (matchedPayments.length > 0) {
+                 let anyUpdated = false;
+                 matchedPayments.forEach(pay => {
+                      const payDate = pay.date_approved ? pay.date_approved.split('T')[0] : pay.date_created.split('T')[0];
+                      if (!student.history) student.history = [];
+                      if (!student.history.some(h => h.transaction_id === pay.id.toString())) {
+                           student.history.push({
+                                date: payDate,
+                                status: 'Completado',
+                                amount: pay.transaction_amount,
+                                method: 'Mercado Pago',
+                                transaction_id: pay.id.toString()
+                           });
+                           student.isPaid = true;
+                           student.lastPaymentDate = payDate;
+                           student.lastPaymentMonth = payDate.substring(0, 7);
+                           anyUpdated = true;
+                      }
+                 });
+
+                 if (anyUpdated) {
+                      const { error: updErr } = await supabase.from('students').update({
+                           history: student.history,
+                           ispaid: student.isPaid,
+                           lastpaymentdate: student.lastPaymentDate,
+                           lastpaymentmonth: student.lastPaymentMonth
+                      }).eq('id', student.id);
+                 }
+            }
+        }
+    } catch (e) {
+        console.error("--- Background Sync Failed ---", e.message || e);
+    }
+}
+
+app.post('/api/students', async (req, res) => {
+    try {
+        const { data: existingIds } = await supabase.from('students').select('id');
+        const takenIds = existingIds ? existingIds.map(e => parseInt(e.id)).filter(n => !isNaN(n)) : [];
+        let newNum = 1;
+        while (takenIds.includes(newNum)) {
+            newNum++;
+        }
+        const newId = newNum.toString();
+
+        const newStudent = { 
+            id: newId,
+            name: req.body.name,
+            email: req.body.email || null,
+            password: req.body.password || null,
+            phone: req.body.phone || null,
+            belt: req.body.belt || 'WHITE',
+            classesattended: Number(req.body.classesAttended) || 0,
+            classestonextbelt: Number(req.body.classesToNextBelt) || 40,
+            ispaid: req.body.isPaid === true,
+            plan: req.body.plan ? req.body.plan.toString() : null,
+            monthlyfee: Number(req.body.monthlyFee) || null,
+            avatar: req.body.avatar || null,
+            birthdate: req.body.birthDate || null,
+            history: Array.isArray(req.body.history) ? req.body.history : [],
+            scheduledclasses: Array.isArray(req.body.scheduledClasses) ? req.body.scheduledClasses : [],
+            joindate: req.body.joinDate || null,
+            lastgrade: req.body.lastGrade || null,
+            graduationdate: req.body.graduationDate || null,
+            sede_id: req.body.sedeId ? Number(req.body.sedeId) : 1
+        };
+        const { error } = await supabase.from('students').insert(newStudent);
+        if (error) throw error;
+        
+        // --- EVNIO AUTOMÁTICO AL REGISTRAR ---
+        if (newStudent.email && newStudent.password && process.env.SMTP_HOST) {
+            try {
+                const smtpUser = process.env.SMTP_USER || process.env.SMTP_FROM;
+                console.log(`📧 Enviando email de bienvenida a ${newStudent.email} via ${process.env.SMTP_HOST} (user: ${smtpUser})`);
+                const transporter = nodemailer.createTransport({
+                    host: process.env.SMTP_HOST,
+                    port: Number(process.env.SMTP_PORT) || 587,
+                    secure: process.env.SMTP_SECURE === 'true',
+                    auth: { user: smtpUser, pass: process.env.SMTP_PASS }
+                });
+                const html = `
+                    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <h2 style="color: #05a86a; margin-top: 1rem; font-size: 1.8rem;">¡Hola ${newStudent.name}!</h2>
+                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te damos la bienvenida al portal oficial de alumnos del <strong>Dojo Ranas</strong>.</p>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 1rem 0; font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em;">TUS DATOS DE ACCESO:</p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Email:</strong> ${newStudent.email}</p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.password}</span></p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Tu ID de Alumno:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.id}</span> (Úsalo en la glosa al transferir)</p>
+                            
+                            <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                        </div>
+
+                        <div style="margin-top: 2rem;">
+                            <p style="font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase;">¿QUÉ PUEDES HACER EN EL PORTAL?</p>
+                            <ul style="padding-left: 1.2rem; line-height: 1.6; color: #475569; font-size: 0.95rem;">
+                                <li><strong>📅 Reservas Semanales:</strong> Gestiona tus días de entrenamiento.</li>
+                                <li><strong>💳 Pago Online:</strong> Paga tu mensualidad vía Mercado Pago.</li>
+                                <li><strong>🥋 Biblioteca Técnica:</strong> Revisa videos exclusivos de tu grado.</li>
+                                <li><strong>📰 Noticias:</strong> Entérate de todo lo que pasa en el Dojo.</li>
+                            </ul>
+                        </div>
+
+                        <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-top: 3rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
+                            Te aconsejamos cambiar tu contraseña en la sección <strong>Mi Perfil</strong> al ingresar.<br>
+                            <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                        </p>
+                    </div>
+                `;
+                transporter.sendMail({
+                    from: '"Dojo Ranas 🐸" <' + (process.env.SMTP_FROM || smtpUser) + '>',
+                    to: newStudent.email,
+                    subject: 'Tus credenciales de acceso - Dojo Ranas 🐸',
+                    html
+                }).then(() => console.log(`✅ Email enviado a ${newStudent.email}`))
+                  .catch(err => console.error("❌ Auto Welcome Mail Error:", err.message));
+            } catch(e) { console.error("❌ SMTP Setup Error:", e.message); }
+        }
+
+        res.status(201).json({ ...req.body, id: newId });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/students/:id', async (req, res) => {
+    try {
+        const updateData = {};
+        if (req.body.name !== undefined) updateData.name = req.body.name;
+        if (req.body.email !== undefined) updateData.email = req.body.email;
+        if (req.body.phone !== undefined) updateData.phone = req.body.phone;
+        if (req.body.password !== undefined) updateData.password = req.body.password;
+        if (req.body.belt !== undefined) updateData.belt = req.body.belt;
+        if (req.body.classesAttended !== undefined) updateData.classesattended = Number(req.body.classesAttended);
+        if (req.body.classesToNextBelt !== undefined) updateData.classestonextbelt = Number(req.body.classesToNextBelt);
+        if (req.body.isPaid !== undefined) updateData.ispaid = req.body.isPaid === true || req.body.isPaid === 'true';
+        if (req.body.plan !== undefined) updateData.plan = req.body.plan ? req.body.plan.toString() : null;
+        if (req.body.monthlyFee !== undefined) updateData.monthlyfee = Number(req.body.monthlyFee);
+        if (req.body.birthDate !== undefined) updateData.birthdate = req.body.birthDate;
+        if (req.body.avatar !== undefined) updateData.avatar = req.body.avatar;
+        if (req.body.lastPaymentDate !== undefined) updateData.lastpaymentdate = req.body.lastPaymentDate;
+        if (req.body.lastPaymentMonth !== undefined) updateData.lastpaymentmonth = req.body.lastPaymentMonth;
+        if (req.body.scheduledClasses !== undefined) updateData.scheduledclasses = req.body.scheduledClasses;
+        if (req.body.joinDate !== undefined) updateData.joindate = req.body.joinDate;
+        if (req.body.lastGrade !== undefined) updateData.lastgrade = req.body.lastGrade;
+        if (req.body.graduationDate !== undefined) updateData.graduationdate = req.body.graduationDate;
+        if (req.body.terms_accepted !== undefined) updateData.terms_accepted = req.body.terms_accepted === true || req.body.terms_accepted === 'true' || req.body.terms_accepted === 1;
+        if (req.body.weight !== undefined) updateData.weight = req.body.weight ? Number(req.body.weight) : null;
+        if (req.body.gender !== undefined) updateData.gender = req.body.gender;
+        if (req.body.sedeId !== undefined) updateData.sede_id = req.body.sedeId ? Number(req.body.sedeId) : null;
+        if (req.body.sede_id !== undefined) updateData.sede_id = req.body.sede_id ? Number(req.body.sede_id) : null;
+
+        // Recuperar registro previo para preservar competition_info de forma indestructible en history JSONB
+        const { data: currentSt } = await supabase.from('students').select('history, weight, gender').eq('id', req.params.id).maybeSingle();
+        
+        let currentHist = Array.isArray(req.body.history) ? [...req.body.history] : (currentSt && Array.isArray(currentSt.history) ? [...currentSt.history] : []);
+        let existingComp = (currentSt && Array.isArray(currentSt.history)) ? currentSt.history.find(h => h && h._competition_info) : null;
+        let compEntry = Array.isArray(req.body.history) ? req.body.history.find(h => h && h._competition_info) : null;
+
+        const finalWeight = req.body.weight !== undefined ? (req.body.weight ? Number(req.body.weight) : null) : (compEntry ? compEntry.weight : (existingComp ? existingComp.weight : null));
+        const finalGender = req.body.gender !== undefined ? req.body.gender : (compEntry ? compEntry.gender : (existingComp ? existingComp.gender : null));
+
+        currentHist = currentHist.filter(h => h && !h._competition_info);
+        if (finalWeight !== null || finalGender !== null) {
+            currentHist.push({
+                _competition_info: true,
+                weight: finalWeight,
+                gender: finalGender
+            });
+        }
+        updateData.history = currentHist;
+
+        console.log(`PUT /api/students/${req.params.id}`, JSON.stringify(updateData));
+        let { error } = await supabase.from('students').update(updateData).eq('id', req.params.id);
+        if (error && (error.message.includes('weight') || error.message.includes('gender') || error.code === 'PGRST204')) {
+            console.warn('Supabase update warning (stripping weight/gender columns if not yet in DB schema):', error.message);
+            const fallbackData = { ...updateData };
+            delete fallbackData.weight;
+            delete fallbackData.gender;
+            const retryRes = await supabase.from('students').update(fallbackData).eq('id', req.params.id);
+            error = retryRes.error;
+        }
+        if (error) {
+            console.error('Supabase update error:', error);
+            throw error;
+        }
+        res.json({ 
+            ...req.body, 
+            id: req.params.id, 
+            weight: finalWeight, 
+            gender: finalGender, 
+            history: currentHist.filter(h => h && !h._competition_info) 
+        });
+    } catch (error) {
+        console.error('PUT student error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/students/:id', async (req, res) => {
+    try {
+        const { error } = await supabase.from('students').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true, message: 'Alumno eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/students/:id/accept-terms', async (req, res) => {
+    try {
+        const { error } = await supabase.from('students').update({ terms_accepted: true }).eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true, message: 'Términos aceptados correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- SYNC PAYMENTS FROM MERCADO PAGO ---
+app.post('/api/students/:id/sync-payments', async (req, res) => {
+    try {
+        const { data: student, error: selectError } = await supabase.from('students').select('*').eq('id', req.params.id).single();
+        if (selectError || !student) return res.status(404).json({ error: 'Alumno no encontrado' });
+
+        const mpClient = await getMPClientForSede(student.sede_id);
+        if (!mpClient) return res.status(400).json({ error: 'Mercado Pago no está configurado para la sede de este alumno.' });
+        const mpPayment = new Payment(mpClient);
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const searchFilters = {
+            status: 'approved',
+            range: 'date_created',
+            begin_date: sixMonthsAgo.toISOString(),
+            end_date: new Date().toISOString(),
+            limit: 500,
+            sort: 'date_created',
+            criteria: 'desc'
+        };
+
+        const result = await mpPayment.search({ options: searchFilters });
+        const payments = result.results || [];
+
+        if (!student.email) return res.json({ message: "El alumno no tiene correo." });
+
+        const studentEmail = student.email.toLowerCase();
+        const studentName = student.name.toLowerCase();
+
+        const newPayments = payments.filter(pay => {
+             const payerEmail = pay.payer?.email?.toLowerCase() || '';
+             const description = pay.description?.toLowerCase() || '';
+             const idRegex = new RegExp(`(^|\\D)${student.id}(\\D|$)`);
+             return payerEmail === studentEmail || description.includes(studentName) || idRegex.test(description);
+        });
+
+        let updatedCount = 0;
+        const history = Array.isArray(student.history) ? student.history : [];
+
+        newPayments.forEach(pay => {
+            const payDate = pay.date_approved ? pay.date_approved.split('T')[0] : pay.date_created.split('T')[0];
+            if (!history.some(h => h.transaction_id === pay.id.toString())) {
+                history.push({
+                    date: payDate,
+                    status: 'Completado',
+                    amount: pay.transaction_amount,
+                    method: 'Mercado Pago',
+                    transaction_id: pay.id.toString()
+                });
+                updatedCount++;
+            }
+        });
+
+        const updatePayload = { history };
+        if (updatedCount > 0) {
+            const lastPay = [...history].sort((a, b) => b.date.localeCompare(a.date))[0];
+            if (lastPay) {
+                updatePayload.lastpaymentmonth = lastPay.date.substring(0, 7);
+                updatePayload.ispaid = true;
+                updatePayload.lastpaymentdate = lastPay.date;
+            }
+            await supabase.from('students').update(updatePayload).eq('id', req.params.id);
+        }
+
+        res.json({
+            message: `Sincronización completada. Se encontraron ${newPayments.length} pagos en Mercado Pago.`,
+            addedCount: updatedCount,
+            student: { ...student, history, isPaid: updatePayload.ispaid || student.ispaid }
+        });
+
+    } catch (error) {
+         res.status(500).json({ error: error.message });
+    }
+});
+
+// Aceptar Términos y Condiciones
+app.post('/api/students/:id/accept-terms', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase
+            .from('students')
+            .update({ terms_accepted: true })
+            .eq('id', id);
+
+        if (error) throw error;
+        res.json({ success: true, message: 'Términos aceptados' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Commission rate for Mercado Pago - Abono inmediato (ajustado para que por $40.000 el cobro sea $41.590)
+const MP_COMMISSION_RATE = 0.03212;
+const MP_IVA_ON_COMMISSION = 0.19;
+
+function calculateSurcharge(baseAmount) {
+    // To ensure dojo receives exactly baseAmount after MP deducts commission:
+    // chargeAmount = baseAmount / (1 - commissionRate * (1 + IVA))
+    const effectiveRate = MP_COMMISSION_RATE * (1 + MP_IVA_ON_COMMISSION);
+    const chargeAmount = Math.ceil(baseAmount / (1 - effectiveRate));
+    const surcharge = chargeAmount - baseAmount;
+    return { chargeAmount, surcharge, effectiveRate };
+}
+
+app.post('/api/checkout', async (req, res) => {
+    try {
+        const { student, students, amount, withSurcharge } = req.body;
+        const isGroup = Array.isArray(students) && students.length > 0;
+
+        // ===== GUARD ANTI-DOBLE-COBRO =====
+        // Verificar que ningún alumno ya pagó este mes (o meses futuros adelantados)
+        const currentMonth = new Date().toISOString().substring(0, 7); // "2026-07"
+        const idsToCheck = isGroup
+            ? students.map(s => s.id)
+            : (student ? [student.id] : []);
+
+        if (idsToCheck.length > 0) {
+            const { data: studentRecords } = await supabase
+                .from('students')
+                .select('id, name, ispaid, lastpaymentmonth')
+                .in('id', idsToCheck)
+                .eq('ispaid', true);
+
+            // Bloquear si lastpaymentmonth >= mes actual (cubre este mes Y pagos adelantados)
+            const alreadyPaid = (studentRecords || []).filter(s =>
+                s.lastpaymentmonth && s.lastpaymentmonth >= currentMonth
+            );
+
+            if (alreadyPaid.length > 0) {
+                const names = alreadyPaid.map(s => s.name).join(', ');
+                const paidUntil = alreadyPaid.map(s => s.lastpaymentmonth).join(', ');
+                console.warn(`[CHECKOUT-GUARD] Bloqueado: ${names} — pagado hasta ${paidUntil}`);
+                return res.status(400).json({
+                    error: `Este alumno ya tiene sus pagos al día hasta ${alreadyPaid[0].lastpaymentmonth}. No es necesario volver a pagar.`,
+                    alreadyPaid: alreadyPaid.map(s => ({ name: s.name, paidUntil: s.lastpaymentmonth }))
+                });
+            }
+        }
+        // ===== FIN GUARD =====
+
+
+        // If withSurcharge, inflate each item's price to cover MP commission
+        const items = isGroup ? students.map(s => {
+            const base = Number(s.monthlyFee || s.monthlyfee || (amount / students.length));
+            const price = withSurcharge ? calculateSurcharge(base).chargeAmount : base;
+            return {
+                id: s.id,
+                title: `Mensualidad Fam. Ranas - ${s.name}`,
+                quantity: 1,
+                currency_id: 'CLP',
+                unit_price: price
+            };
+        }) : [
+            {
+                id: student.id,
+                title: `Mensualidad Dojo Ranas - ${student.name}`,
+                quantity: 1,
+                currency_id: 'CLP',
+                unit_price: withSurcharge ? calculateSurcharge(Number(amount)).chargeAmount : Number(amount)
+            }
+        ];
+
+        const totalCharged = items.reduce((acc, i) => acc + i.unit_price, 0);
+        
+        // Determinar sede para checkout
+        const targetSedeId = isGroup ? (students[0].sede_id || students[0].sedeId) : (student.sede_id || student.sedeId);
+        const mpClient = await getMPClientForSede(targetSedeId);
+        if (!mpClient) {
+            return res.status(400).json({ success: false, error: 'Mercado Pago no está configurado para tu sede aún. Por favor contacta al administrador.' });
+        }
+        console.log(`[CHECKOUT] Sede: ${targetSedeId}, Amount: $${amount}, WithSurcharge: ${!!withSurcharge}, Total charged: $${totalCharged}`);
+
+        const preference = new Preference(mpClient);
+        const webhookUrl = (process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com') + `/api/webhooks?sede_id=${targetSedeId || ''}`;
+        const result = await preference.create({
+            body: {
+                items: items,
+                payer: {
+                    email: isGroup ? students[0].email : student.email
+                },
+                external_reference: isGroup ? students.map(s => s.id).join(',') : student.id.toString(),
+                back_urls: {
+                    success: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=success',
+                    failure: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=failure',
+                    pending: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=pending'
+                },
+                auto_return: "approved",
+                notification_url: webhookUrl
+            }
+        });
+
+        res.json({ init_point: result.init_point, totalCharged, surcharge: withSurcharge ? (totalCharged - amount) : 0 });
+    } catch (error) {
+        console.error('MP Preference Error:', error);
+        res.status(500).json({ error: 'Failed to create payment link' });
+    }
+});
+
+// Enviar recordatorio de pago individual
+app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
+    try {
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            return res.status(400).json({ error: 'Configuración SMTP incompleta' });
+        }
+        
+        const { data: student, error: selectError } = await supabase.from('students').select('*').eq('id', req.params.id).single();
+        if (selectError || !student) return res.status(404).json({ error: 'Alumno no encontrado' });
+        if (!student.email) return res.status(400).json({ error: 'Alumno sin correo configurado' });
+        if (!student.monthlyfee) return res.status(400).json({ error: 'Alumno no tiene mensualidad configurada' });
+
+        const mpClient = await getMPClientForSede(student.sede_id);
+        if (!mpClient) return res.status(400).json({ error: 'Mercado Pago no está configurado para la sede de este alumno.' });
+        const preference = new Preference(mpClient);
+        const webhookUrl = (process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com') + `/api/webhooks?sede_id=${student.sede_id || ''}`;
+        const result = await preference.create({
+            body: {
+                items: [
+                    {
+                        title: `Mensualidad Dojo Ranas - ${student.name}`,
+                        quantity: 1,
+                        currency_id: 'CLP',
+                        unit_price: Number(student.monthlyfee)
+                    }
+                ],
+                payer: { email: student.email },
+                back_urls: {
+                    success: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=success',
+                    failure: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=failure',
+                    pending: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=pending'
+                },
+                auto_return: "approved",
+                notification_url: webhookUrl
+            }
+        });
+
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT) || 587,
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        });
+
+        await transporter.sendMail({
+            from: `"Dojo Ranas" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+            to: student.email,
+            subject: 'Aviso de Cobro Mensual - Dojo Ranas 🐸',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                    <h2 style="color: #05a86a;">¡Hola ${student.name}!</h2>
+                    <p>Esperamos que estés teniendo un gran mes de entrenamiento. Te recordamos que tu pago mensual se encuentra pendiente.</p>
+                    <div style="background: #f4f4f4; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                        <p style="margin: 0; font-size: 1.2rem;"><strong>Mensualidad:</strong> $${student.monthlyfee.toLocaleString('es-CL')}</p>
+                        <a href="${result.init_point}" style="display: inline-block; background: #009ee3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px;">
+                            Pagar con Mercado Pago
+                        </a>
+                    </div>
+                    <p style="font-size: 0.9rem; color: #666;">También puedes revisar tu estado de cuenta iniciando sesión en nuestro portal de alumnos.</p>
+                    <p>¡Nos vemos en el tatami!</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                    <p style="font-size: 0.8rem; color: #999;">Dojo Ranas Team - Orompello 1421</p>
+                </div>
+            `,
+        });
+
+        res.json({ success: true, message: 'Recordatorio enviado' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Generar contraseñas para los que no tienen (Alumnos Antiguos)
+app.post('/api/admin/generate-passwords', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        let query = supabase.from('students').select('*').is('password', null);
+        if (targetSedeId) {
+            query = query.eq('sede_id', targetSedeId);
+        }
+        const { data: students, error: selectError } = await query;
+        if (selectError) throw selectError;
+
+        let counts = 0;
+        for (const s of (students || [])) {
+            const pass = Math.random().toString(36).slice(-6).toUpperCase();
+            await supabase.from('students').update({ password: pass }).eq('id', s.id);
+            counts++;
+        }
+        res.json({ success: true, count: counts });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Enviar credenciales (contraseñas masivas)
+app.post('/api/admin/send-credentials', async (req, res) => {
+    try {
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            return res.status(400).json({ error: 'Configuración SMTP incompleta en el archivo .env' });
+        }
+
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT) || 587,
+            secure: process.env.SMTP_SECURE === 'true', // true para 465, false para otros
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        });
+
+        // Asegúrate de que los estudiantes vivan con password disponible
+        let query = supabase.from('students').select('*');
+        if (targetSedeId) {
+            query = query.eq('sede_id', targetSedeId);
+        }
+        let { data: students, error: selectError } = await query;
+        if (selectError) throw selectError;
+
+        // Filtrar según el grupo solicitado
+        const { ageGroup, customSubject, customMessage } = req.body; // 'ALL', 'KIDS', 'ADULTS'
+        if (ageGroup && ageGroup !== 'ALL') {
+            const today = new Date();
+            students = students.filter(s => {
+                if (!s.birthdate) return ageGroup === 'ADULTS';
+                const bd = new Date(s.birthdate);
+                let age = today.getFullYear() - bd.getFullYear();
+                const m = today.getMonth() - bd.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+                return ageGroup === 'KIDS' ? age < 18 : age >= 18;
+            });
+        }
+
+        let sentCount = 0;
+        let errors = [];
+
+        for (const student of students) {
+            if (!student.email || !student.password) continue;
+
+            try {
+                // Template default si no viene customMessage
+                let finalSubject = customSubject || 'Tus credenciales de acceso - Dojo Ranas 🐸';
+                let finalHtml = customMessage || `
+                    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <h2 style="color: #05a86a; margin-top: 1rem; font-size: 1.8rem;">¡Hola {{name}}!</h2>
+                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te enviamos tus credenciales para acceder al portal oficial de <strong>Dojo Ranas</strong>.</p>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 1rem 0; font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em;">DATOS DE ACCESO:</p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Email:</strong> {{email}}</p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">{{password}}</span></p>
+                            
+                            <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                        </div>
+
+                        <div style="margin-top: 2rem;">
+                            <p style="font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase;">¿QUÉ PUEDES HACER EN EL PORTAL?</p>
+                            <ul style="padding-left: 1.2rem; line-height: 1.6; color: #475569; font-size: 0.95rem;">
+                                <li><strong>📅 Reservas Semanales:</strong> Organiza tus entrenamientos.</li>
+                                <li><strong>💳 Pago Online:</strong> Gestiona tu mensualidad con Mercado Pago.</li>
+                                <li><strong>🥋 Biblioteca Técnica:</strong> Videos exclusivos según tu cinturón.</li>
+                                <li><strong>📰 Noticias:</strong> Todo lo que necesitas saber del Dojo.</li>
+                            </ul>
+                        </div>
+
+                        <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-top: 3rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
+                            Te aconsejamos cambiar tu contraseña en la sección <strong>Mi Perfil</strong> al ingresar.<br>
+                            <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                        </p>
+                    </div>
+                `;
+
+                // Reemplazos dinámicos
+                finalHtml = finalHtml
+                    .replace(/{{name}}/g, student.name)
+                    .replace(/{{email}}/g, student.email)
+                    .replace(/{{password}}/g, student.password);
+
+                await transporter.sendMail({
+                    from: `"Dojo Ranas" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+                    to: student.email,
+                    subject: finalSubject,
+                    html: finalHtml,
+                });
+                sentCount++;
+            } catch (e) {
+                errors.push({ email: student.email, error: e.message });
+            }
+        }
+
+        res.json({ success: true, message: `Acaban de enviarse ${sentCount} correos con éxito.`, errors });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Recuperar contraseña - envía las credenciales por email
+const recoveryCooldowns = {};
+app.post('/api/recover-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Correo electrónico requerido' });
+
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            return res.status(500).json({ error: 'El servicio de correo no está configurado. Contacta al administrador.' });
+        }
+
+        const lowerEmail = email.trim().toLowerCase();
+        const now = Date.now();
+        if (recoveryCooldowns[lowerEmail] && (now - recoveryCooldowns[lowerEmail] < 60000)) {
+            console.log(`[RECOVERY-COOLDOWN] Ignorando petición repetida para: ${lowerEmail}`);
+            return res.json({ success: true, message: 'Si el correo está registrado, recibirás un email con tus datos de acceso.' });
+        }
+        recoveryCooldowns[lowerEmail] = now;
+
+        const { data: students, error: selectError } = await supabase
+            .from('students')
+            .select('name, email, password')
+            .ilike('email', lowerEmail);
+
+        if (selectError) throw selectError;
+
+        // Siempre respondemos con éxito para no revelar si el email existe o no (seguridad)
+        if (!students || students.length === 0) {
+            return res.json({ success: true, message: 'Si el correo está registrado, recibirás un email con tus datos de acceso.' });
+        }
+
+        const validStudents = students.filter(s => s.password);
+        if (validStudents.length === 0) {
+            return res.json({ success: true, message: 'Si el correo está registrado, recibirás un email con tus datos de acceso.' });
+        }
+
+        const smtpUser = process.env.SMTP_USER || process.env.SMTP_FROM;
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT) || 587,
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: { user: smtpUser, pass: process.env.SMTP_PASS }
+        });
+
+        // Generar filas de credenciales si hay múltiples cuentas con el mismo email
+        const credentialsRows = validStudents.map(s => `
+            <tr>
+                <td style="padding: 0.8rem 1rem; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${s.name}</td>
+                <td style="padding: 0.8rem 1rem; border-bottom: 1px solid #e2e8f0;">
+                    <span style="background: #05a86a; color: #fff; padding: 3px 10px; border-radius: 6px; font-weight: 800; letter-spacing: 0.05em;">${s.password}</span>
+                </td>
+            </tr>
+        `).join('');
+
+        const firstName = validStudents[0].name.split(' ')[0];
+
+        const html = `
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <div style="width: 60px; height: 60px; background: #05a86a; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                        <span style="font-size: 1.8rem;">🔑</span>
+                    </div>
+                    <h2 style="color: #05a86a; margin-top: 0.5rem; font-size: 1.6rem;">Recuperación de Contraseña</h2>
+                    <p style="font-size: 1rem; color: #64748b; margin-top: 0.5rem;">Hola <strong>${firstName}</strong>, aquí tienes tus datos de acceso al portal de <strong>Dojo Ranas</strong>.</p>
+                </div>
+                
+                <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
+                    <p style="margin: 0 0 1rem 0; font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em;">TUS CREDENCIALES:</p>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+                        <thead>
+                            <tr style="background: rgba(5,168,106,0.08);">
+                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid #05a86a;">Nombre</th>
+                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid #05a86a;">Contraseña</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${credentialsRows}
+                        </tbody>
+                    </table>
+                    <p style="margin: 1rem 0 0 0; font-size: 0.85rem; color: #64748b;"><strong>Email de acceso:</strong> ${lowerEmail}</p>
+                    
+                    <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 1.5rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                </div>
+
+                <div style="background: #fffbeb; border: 1px solid #fbbf24; padding: 1.2rem; border-radius: 1rem; margin-bottom: 1.5rem;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #92400e;">
+                        <strong>⚠️ Seguridad:</strong> Te recomendamos cambiar tu contraseña desde la sección <strong>Mi Perfil</strong> dentro del portal.
+                    </p>
+                </div>
+
+                <p style="font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 2rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
+                    Si no solicitaste este correo, puedes ignorarlo.<br>
+                    <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                </p>
+            </div>
+        `;
+
+        await transporter.sendMail({
+            from: `"Dojo Ranas 🐸" <${process.env.SMTP_FROM || smtpUser}>`,
+            to: lowerEmail,
+            subject: 'Recuperación de contraseña - Dojo Ranas 🐸',
+            html
+        });
+
+        console.log(`🔑 Password recovery email sent to ${lowerEmail} (${validStudents.length} accounts)`);
+        res.json({ success: true, message: 'Si el correo está registrado, recibirás un email con tus datos de acceso.' });
+
+    } catch (error) {
+        console.error('❌ Password recovery error:', error.message);
+        res.status(500).json({ error: 'Error al procesar la solicitud. Intenta nuevamente.' });
+    }
+});
+
+// Health check endpoint (for self-ping keep-alive)
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+// Mercado Pago: Webhook
+app.post('/api/webhooks', async (req, res) => {
+    console.log('--- WEBHOOK RECEIVED ---', JSON.stringify(req.body));
+
+    // Respond IMMEDIATELY so Mercado Pago doesn't timeout
+    res.sendStatus(200);
+
+    // Mercado Pago manda el ID de diferentes formas dependiendo del evento
+    const paymentId = req.body.data?.id || req.body.id;
+    const action = req.body.action || req.body.type;
+
+    if (!paymentId) {
+        console.log('No payment ID found in webhook body');
+        return;
+    }
+
+    try {
+        const sedeId = req.query.sede_id;
+        const mpClient = await getMPClientForSede(sedeId);
+        if (!mpClient) {
+            console.error(`[WEBHOOK ERROR] Sede ${sedeId} does not have MP configured.`);
+            return res.status(400).json({ error: 'Sede sin Mercado Pago configurado.' });
+        }
+        const mpPayment = new Payment(mpClient);
+        const payDetails = await mpPayment.get({ id: paymentId });
+
+        if (payDetails.status === 'approved') {
+            const payerEmail = payDetails.payer.email;
+            const amount = payDetails.transaction_amount;
+            const payDate = payDetails.date_approved.split('T')[0];
+
+            console.log(`Payment Approved: ${paymentId} - Email: ${payerEmail} - Amount: ${amount}`);
+
+            // Buscamos alumno(s) en Supabase usando Preferencia de ID
+            const externalRef = payDetails.external_reference;
+            let studentIds = [];
+
+            if (externalRef) {
+                studentIds = externalRef.split(',');
+            }
+
+            if (studentIds.length === 0) {
+                const desc = (payDetails.description || '').toLowerCase();
+                const pEmail = (payerEmail || '').toLowerCase();
+                const { data: allStudents } = await supabase.from('students').select('id, email, name');
+                if (allStudents) {
+                    const matchedStudent = allStudents.find(s => {
+                        if (!s.email) return false;
+                        const sEmail = s.email.toLowerCase();
+                        return sEmail === pEmail || desc.includes(sEmail);
+                    });
+                    if (matchedStudent) {
+                        studentIds.push(matchedStudent.id);
+                    } else {
+                        const matchedByName = allStudents.find(s => s.name && desc.includes(s.name.toLowerCase()));
+                        if (matchedByName) studentIds.push(matchedByName.id);
+                    }
+                }
+            }
+
+            if (studentIds.length > 0) {
+                const historyAmount = studentIds.length > 1 ? (amount / studentIds.length) : amount;
+                
+                for (const sid of studentIds) {
+                    const { data: student } = await supabase.from('students').select('*').eq('id', sid.trim()).maybeSingle();
+                    if (student) {
+                        const history = Array.isArray(student.history) ? student.history : [];
+                        if (!history.some(h => h.transaction_id === paymentId.toString())) {
+                            history.push({
+                                date: payDate,
+                                status: 'Completado',
+                                amount: historyAmount,
+                                method: studentIds.length > 1 ? 'Mercado Pago (Familiar)' : 'Mercado Pago',
+                                transaction_id: paymentId.toString()
+                            });
+
+                            await supabase.from('students').update({
+                                history: history,
+                                ispaid: true,
+                                lastpaymentdate: payDate,
+                                lastpaymentmonth: payDate.substring(0, 7)
+                            }).eq('id', student.id);
+
+                            console.log(`Student ${student.name} updated successfully via Webhook.`);
+                        } else {
+                            console.log(`Payment already exists in history for ${student.name}. Skipping.`);
+                        }
+                    }
+                }
+            } else {
+                console.warn(`No student found for email: ${payerEmail} and no External Ref. Payment ${paymentId} received but not linked.`);
+            }
+        } else {
+            console.log(`Payment ${paymentId} status: ${payDetails.status}. No action taken.`);
+        }
+    } catch (error) {
+        console.error('Webhook processing error:', error);
+    }
+});
+
+
+// Saludos de hoy - Solo como gatillo manual si se necesita forzar
+app.post('/api/admin/check-birthdays', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        let query = supabase.from('students').select('*');
+        if (targetSedeId) {
+            query = query.eq('sede_id', targetSedeId);
+        }
+        const { data: students, error } = await query;
+        if (error) throw error;
+
+        const now = new Date();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const searchDate = `-${mm}-${dd}`;
+
+        const birthdayStudents = students.filter(s => s.birthdate && s.birthdate.includes(searchDate));
+        const noticeId = 999900 + (targetSedeId || 99);
+        
+        if (birthdayStudents.length > 0) {
+            const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
+            const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
+            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su Dojo Ranas! 🥋🐸`;
+            
+            await supabase.from('news').upsert({
+                id: noticeId,
+                title: subject,
+                body: message,
+                date: now.toISOString(),
+                stats: [],
+                link: '#',
+                img: '',
+                label: 'Aviso del Dojo',
+                sede_id: targetSedeId
+            });
+
+            // Also save to noticeFile per sede
+            const key = targetSedeId ? String(targetSedeId) : 'global';
+            let allNotices = {};
+            if (fs.existsSync(noticeFile)) {
+                try { allNotices = JSON.parse(fs.readFileSync(noticeFile, 'utf-8')) || {}; } catch(e){}
+            }
+            allNotices[key] = { subject, message, date: now.toISOString() };
+            writeData(noticeFile, allNotices);
+
+            res.json({ success: true, message: `Aviso global publicado para: ${names}` });
+        } else {
+            res.json({ success: true, message: 'No hay alumnos de cumpleaños hoy.' });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Broadcast global (Notificación en App Exclusivamente)
+app.post('/api/admin/broadcast', async (req, res) => {
+    try {
+        const { subject, message } = req.body;
+        if (!subject || !message) return res.status(400).json({ error: 'Asunto y mensaje requeridos' });
+
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        const noticeId = 999900 + (targetSedeId || 99);
+
+        const noticeData = {
+            subject,
+            message,
+            date: new Date().toISOString()
+        };
+        
+        // Persistencia en Render vía Supabase (Usamos ID reservado en tabla news)
+        try {
+            await supabase.from('news').upsert({
+                id: noticeId,
+                title: subject,
+                body: message,
+                date: noticeData.date,
+                stats: [],
+                link: '#',
+                img: '',
+                label: 'Aviso del Dojo',
+                sede_id: targetSedeId
+            });
+        } catch (supaErr) {
+            console.error('Error saving notice to Supabase:', supaErr);
+        }
+
+        const key = targetSedeId ? String(targetSedeId) : 'global';
+        let allNotices = {};
+        if (fs.existsSync(noticeFile)) {
+            try { allNotices = JSON.parse(fs.readFileSync(noticeFile, 'utf-8')) || {}; } catch(e){}
+        }
+        allNotices[key] = noticeData;
+        writeData(noticeFile, allNotices);
+        res.json({ success: true, message: `Aviso publicado en los portales de los alumnos de esta sede.` });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/global-notice', async (req, res) => {
+    try {
+        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        const key = targetSedeId ? String(targetSedeId) : 'global';
+        const noticeId = 999900 + (targetSedeId || 99);
+        const { data: supaNotice, error } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
+        if (supaNotice) {
+            // If it's a birthday notice, check if it's still today in Chile timezone
+            if (supaNotice.title && supaNotice.title.includes('Cumpleaños') && supaNotice.date) {
+                const noticeDate = new Date(supaNotice.date);
+                const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+                const noticeDateChile = new Date(noticeDate.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+                // Compare only the date part (year-month-day) in Chile time
+                if (nowChile.getFullYear() !== noticeDateChile.getFullYear() ||
+                    nowChile.getMonth() !== noticeDateChile.getMonth() ||
+                    nowChile.getDate() !== noticeDateChile.getDate()) {
+                    // Birthday notice expired — delete it and return null
+                    await supabase.from('news').delete().eq('id', noticeId);
+                    return res.json(null);
+                }
+            }
+            return res.json({ subject: supaNotice.title, message: supaNotice.body });
+        }
+
+        if (fs.existsSync(noticeFile)) {
+            try {
+                const raw = fs.readFileSync(noticeFile, 'utf-8');
+                const parsed = JSON.parse(raw);
+                const localNotice = parsed ? (parsed[key] || (parsed.subject ? (targetSedeId ? null : parsed) : null)) : null;
+                if (localNotice && localNotice.subject) {
+                    if (localNotice.subject.includes('Cumpleaños') && localNotice.date) {
+                        const noticeDate = new Date(localNotice.date);
+                        const nowChile = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+                        const noticeDateChile = new Date(noticeDate.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+                        if (nowChile.getFullYear() !== noticeDateChile.getFullYear() ||
+                            nowChile.getMonth() !== noticeDateChile.getMonth() ||
+                            nowChile.getDate() !== noticeDateChile.getDate()) {
+                            delete parsed[key];
+                            writeData(noticeFile, parsed);
+                            return res.json(null);
+                        }
+                    }
+                    return res.json(localNotice);
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+        res.json(null);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================
+// AUTO-SYNC: Transferencias MP
+// ============================
+// Función auxiliar para sincronizar transferencias de una sede específica
+async function syncTransferPaymentsForSede(sedeId) {
+    try {
+        // Traer alumnos de esta sede
+        const { data: students, error: studErr } = await supabase
+            .from('students')
+            .select('*')
+            .eq('sede_id', Number(sedeId));
+        if (studErr) throw studErr;
+
+        if (!students || students.length === 0) return { synced: 0, details: [] };
+
+        // Build email->students map
+        const emailToStudents = {};
+        students.forEach(s => {
+            if (s.email) {
+                const key = s.email.trim().toLowerCase();
+                if (!emailToStudents[key]) emailToStudents[key] = [];
+                emailToStudents[key].push(s);
+            }
+        });
+
+        // Get MP payments
+        const mpClient = await getMPClientForSede(sedeId);
+        if (!mpClient) {
+            console.log(`[SYNC-SEDE-${sedeId}] Saltando sincronización: Mercado Pago no configurado para esta sede.`);
+            return { synced: 0, details: [] };
+        }
+        const mpPayment = new Payment(mpClient);
+        const since = new Date();
+        since.setDate(since.getDate() - 15);
+
+        const result = await mpPayment.search({
+            options: {
+                range: 'date_created',
+                begin_date: since.toISOString(),
+                end_date: new Date().toISOString(),
+                limit: 500,
+                sort: 'date_created',
+                criteria: 'desc'
+            }
+        });
+
+        const payments = (result.results || []).filter(p =>
+            p.status === 'approved' &&
+            (p.operation_type === 'money_transfer' || p.operation_type === 'regular_payment')
+        );
+
+        let synced = 0;
+        let details = [];
+
+        for (const payment of payments) {
+            const payerEmail = payment.payer?.email?.toLowerCase();
+            const extRef = payment.external_reference;
+            const payDate = payment.date_created?.split('T')[0] || new Date().toISOString().split('T')[0];
+            const payMonth = payDate.substring(0, 7);
+            const amount = payment.transaction_amount;
+            const isTransfer = payment.operation_type === 'money_transfer';
+
+            // Try to match by external_reference first (checkout payments)
+            let matchedStudentIds = [];
+            if (extRef && !extRef.startsWith('money_transfer') && !extRef.includes('-')) {
+                matchedStudentIds = extRef.split(',').map(id => id.trim());
+            }
+
+            // Then try by email (transfers)
+            if (matchedStudentIds.length === 0 && payerEmail) {
+                const matched = emailToStudents[payerEmail] || [];
+                matchedStudentIds = matched.map(s => s.id.toString());
+            }
+
+            // Search in description (glosa) for ID pattern
+            if (matchedStudentIds.length === 0 && payment.description) {
+                const idRegex = /\bID[:\s]*(\d+)\b/gi;
+                let match;
+                while ((match = idRegex.exec(payment.description)) !== null) {
+                    const potentialId = match[1];
+                    const numIdStr = Number(potentialId).toString();
+                    const found = students.find(s => s.id.toString() === numIdStr);
+                    if (found && !matchedStudentIds.includes(numIdStr)) {
+                        matchedStudentIds.push(numIdStr);
+                    }
+                }
+            }
+
+            if (matchedStudentIds.length === 0) continue;
+
+            const perStudentAmount = matchedStudentIds.length > 1 ? Math.round(amount / matchedStudentIds.length) : amount;
+
+            for (const sid of matchedStudentIds) {
+                const student = students.find(s => s.id.toString() === sid.toString());
+                if (!student) continue;
+
+                const history = Array.isArray(student.history) ? student.history : [];
+                const txId = payment.id.toString();
+
+                // Skip if already registered
+                if (history.some(h => h.transaction_id === txId)) continue;
+
+                history.push({
+                    date: payDate,
+                    status: 'Completado',
+                    amount: perStudentAmount,
+                    method: isTransfer ? 'Transferencia MP' : 'Mercado Pago',
+                    transaction_id: txId
+                });
+
+                const { error: upErr } = await supabase.from('students').update({
+                    history: history,
+                    ispaid: true,
+                    lastpaymentdate: payDate,
+                    lastpaymentmonth: payMonth
+                }).eq('id', student.id);
+
+                if (!upErr) {
+                    synced++;
+                    details.push({ name: student.name, amount: perStudentAmount, type: isTransfer ? 'transfer' : 'checkout', txId });
+                    console.log(`[SYNC-SEDE-${sedeId}] ✅ ${student.name} - $${perStudentAmount} (${isTransfer ? 'Transferencia' : 'Checkout'}) - TX: ${txId}`);
+                }
+            }
+        }
+        return { synced, details };
+    } catch (e) {
+        console.error(`[SYNC-SEDE-${sedeId} ERROR]`, e.message);
+        return { synced: 0, error: e.message };
+    }
+}
+
+async function syncTransferPayments() {
+    console.log('[SYNC] Iniciando sincronización de transferencias MP...');
+    try {
+        // Obtener todas las sedes
+        const { data: sedes, error: sedesErr } = await supabase.from('sedes').select('id, name');
+        if (sedesErr) {
+            console.error('[SYNC] No se pudieron obtener las sedes. Fallback a Concepción (ID: 1).');
+        }
+
+        const activeSedes = sedes && sedes.length > 0 ? sedes : [{ id: 1, name: 'Concepción' }];
+        let totalSynced = 0;
+        let allDetails = [];
+
+        for (const sede of activeSedes) {
+            console.log(`[SYNC] Procesando sede: ${sede.name} (ID: ${sede.id})`);
+            const result = await syncTransferPaymentsForSede(sede.id);
+            totalSynced += result.synced || 0;
+            if (result.details) allDetails = allDetails.concat(result.details);
+        }
+
+        console.log(`[SYNC] Completado global: ${totalSynced} pagos sincronizados`);
+        return { synced: totalSynced, details: allDetails };
+    } catch (e) {
+        console.error('[SYNC GLOBAL ERROR]', e.message);
+        return { synced: 0, error: e.message };
+    }
+}
+
+// Transfer intent: student declares they have made a transfer
+const transferIntentsFile = path.join(dbPath, 'transfer_intents.json');
+app.post('/api/transfer-intent', async (req, res) => {
+    try {
+        const { studentIds, reference, amount, date } = req.body;
+        const intents = readData(transferIntentsFile) || [];
+        intents.push({
+            studentIds,
+            reference,
+            amount,
+            date: date || new Date().toISOString(),
+            matched: false
+        });
+        writeData(transferIntentsFile, intents);
+        console.log(`[TRANSFER-INTENT] Registered: ${reference} for students ${studentIds.join(',')} - $${amount}`);
+        res.json({ success: true, message: 'Intent registrado correctamente' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
+// REPAIR: Inconsistent Student Profiles
+// ======================================
+async function repairInconsistentProfiles() {
+    console.log('[REPAIR] Iniciando escaneo de perfiles inconsistentes...');
+    try {
+        const { data: students, error } = await supabase.from('students').select('*');
+        if (error) throw error;
+
+        const now = DateTime.now().setZone('America/Santiago');
+        const currentMonth = now.toFormat('yyyy-MM');
+        let repairedCount = 0;
+
+        for (const student of students) {
+            const history = Array.isArray(student.history) ? student.history : [];
+            // Check if there is a completed payment in the current month
+            const hasRecentPayment = history.some(h => 
+                h.status === 'Completado' && 
+                h.date && h.date.startsWith(currentMonth)
+            );
+
+            // If they paid this month but are marked as unpaid, FIX THEM
+            if (hasRecentPayment && student.ispaid === false) {
+                console.log(`[REPAIR] 🔧 Reparando perfil de ${student.name} (ID: ${student.id}) - Tenía pago en ${currentMonth} pero estaba como No Pagado.`);
+                
+                // Find the latest payment date in history to use as lastpaymentdate
+                const sortedHistory = [...history].sort((a, b) => b.date.localeCompare(a.date));
+                const lastPay = sortedHistory.find(h => h.status === 'Completado');
+                
+                if (lastPay) {
+                    const { error: updErr } = await supabase.from('students').update({
+                        ispaid: true,
+                        lastpaymentdate: lastPay.date,
+                        lastpaymentmonth: lastPay.date.substring(0, 7)
+                    }).eq('id', student.id);
+                    
+                    if (!updErr) repairedCount++;
+                }
+            }
+        }
+
+        if (repairedCount > 0) {
+            console.log(`[REPAIR] Sincronización finalizada. Se repararon ${repairedCount} perfiles.`);
+        }
+        return repairedCount;
+    } catch (e) {
+        console.error('[REPAIR ERROR]', e.message);
+        return 0;
+    }
+}
+
+// ======================================
+// EXPIRATION: Check 28 Days Rule
+// ======================================
+async function expireOldPayments() {
+    console.log('[EXPIRATION] Verificando vencimiento de 28 días...');
+    try {
+        const { data: students, error } = await supabase.from('students').select('id, ispaid, lastpaymentdate, lastpaymentmonth, name');
+        if (error) throw error;
+
+        const now = new Date();
+        const currentMonth = now.toISOString().substring(0, 7); // "2026-07"
+        let expiredCount = 0;
+
+        for (const s of students) {
+            if (s.lastpaymentdate && s.ispaid === true) {
+
+                // Si el alumno tiene pagos adelantados (lastpaymentmonth > mes actual), NO expirar
+                if (s.lastpaymentmonth && s.lastpaymentmonth > currentMonth) {
+                    console.log(`[EXPIRATION] ✅ ${s.name} — Pago adelantado hasta ${s.lastpaymentmonth}. No se expira.`);
+                    continue;
+                }
+
+                // Expirar si han pasado más de 28 días desde el último pago
+                const pDate = new Date(s.lastpaymentdate);
+                pDate.setDate(pDate.getDate() + 28);
+                if (now > pDate) {
+                    console.log(`[EXPIRATION] 🔴 Expirando pago de ${s.name} (ID: ${s.id}). Último pago: ${s.lastpaymentdate}`);
+                    await supabase.from('students').update({ ispaid: false }).eq('id', s.id);
+                    expiredCount++;
+                }
+            }
+        }
+        if (expiredCount > 0) {
+            console.log(`[EXPIRATION] Verificación completada. Se expiraron ${expiredCount} pagos.`);
+        }
+    } catch (e) {
+        console.error('[EXPIRATION ERROR]', e.message);
+    }
+}
+
+
+// API endpoint for manual repair trigger
+app.post('/api/admin/repair-profiles', async (req, res) => {
+    try {
+        const repaired = await repairInconsistentProfiles();
+        res.json({ success: true, repaired });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// API endpoint for manual sync trigger
+app.post('/api/admin/sync-transfers', async (req, res) => {
+    try {
+        const result = await syncTransferPayments();
+        res.json({ success: true, ...result });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// CRON: Auto-sync transfers every 10 minutes + Repair
+cron.schedule('*/10 * * * *', async () => {
+    console.log('[CRON] Auto-sync y Repair (10 min)...');
+    await syncTransferPayments();
+    await repairInconsistentProfiles();
+}, {
+    scheduled: true,
+    timezone: "America/Santiago"
+});
+
+// Automatización diaria de cumpleaños y escaneo profundo (09:00 Hora de Chile)
+cron.schedule('0 9 * * *', async () => {
+    console.log('[CRON] Iniciando verificación diaria (09:00 Chile)...');
+    
+    // 1. Repair Inconsistent Profiles
+    await repairInconsistentProfiles();
+
+    // 2. Expire old payments (28 Days Rule)
+    await expireOldPayments();
+
+    // 3. Birthdays
+    try {
+        const { data: students, error } = await supabase.from('students').select('*');
+        if (error) throw error;
+
+        const chileTime = DateTime.now().setZone('America/Santiago');
+        const mm = String(chileTime.month).padStart(2, '0');
+        const dd = String(chileTime.day).padStart(2, '0');
+        const searchDate = `-${mm}-${dd}`;
+
+        const { data: sedes } = await supabase.from('sedes').select('id');
+        const sedeIds = sedes ? sedes.map(s => s.id) : [1];
+
+        for (const sId of sedeIds) {
+            const sedeStudents = students.filter(s => s.sede_id === sId);
+            const birthdayStudents = sedeStudents.filter(s => s.birthdate && s.birthdate.includes(searchDate));
+            const noticeId = 999900 + sId;
+
+            if (birthdayStudents.length > 0) {
+                const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
+                const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
+                const message = `Hoy saludamos especialmente a **${names}** en su día. ¡Que tengas un excelente cumpleaños y nos vemos pronto en el Dojo! 🥋🐸`;
+                
+                await supabase.from('news').upsert({
+                    id: noticeId,
+                    title: subject,
+                    body: message,
+                    date: chileTime.toISO(),
+                    sede_id: sId
+                });
+                console.log(`[CRON] Sede ${sId} - Aviso de cumpleaños publicado: ${names}`);
+            } else {
+                const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
+                if (currentNotice && currentNotice.title.includes('Cumpleaños')) {
+                    await supabase.from('news').delete().eq('id', noticeId);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[CRON ERROR] Error en la tarea programada:', e.message);
+    }
+}, {
+    scheduled: true,
+    timezone: "America/Santiago"
+});
+
+// --- FEES & AUTOMATION PERSISTENCE (Using reserved news IDs) ---
+const DEFAULT_FEES = {
+    adults: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 },
+    kids: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 }
+};
+
+app.get('/api/fees', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data, error } = await supabase
+            .from('news')
+            .select('*')
+            .eq('title', 'SYSTEM_FEES')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        if (data && data.body) {
+            const stored = JSON.parse(data.body);
+            return res.json({
+                adults: { ...DEFAULT_FEES.adults, ...stored.adults },
+                kids: { ...DEFAULT_FEES.kids, ...stored.kids }
+            });
+        }
+        // Fallback global check
+        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999998).maybeSingle();
+        if (globalData && globalData.body) {
+            const stored = JSON.parse(globalData.body);
+            return res.json({
+                adults: { ...DEFAULT_FEES.adults, ...stored.adults },
+                kids: { ...DEFAULT_FEES.kids, ...stored.kids }
+            });
+        }
+        res.json(DEFAULT_FEES);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/fees', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data: existing } = await supabase
+            .from('news')
+            .select('id')
+            .eq('title', 'SYSTEM_FEES')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        const payload = {
+            title: 'SYSTEM_FEES',
+            body: JSON.stringify(req.body),
+            date: new Date().toISOString(),
+            sede_id: sedeId
+        };
+
+        if (existing) {
+            await supabase.from('news').update(payload).eq('id', existing.id);
+        } else {
+            await supabase.from('news').insert(payload);
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/automation', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data, error } = await supabase
+            .from('news')
+            .select('*')
+            .eq('title', 'SYSTEM_AUTOMATION')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        if (data && data.body) {
+            return res.json(JSON.parse(data.body));
+        }
+        // Fallback global check
+        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999997).maybeSingle();
+        if (globalData && globalData.body) {
+            return res.json(JSON.parse(globalData.body));
+        }
+        res.json({ reminderDay: 5, whatsappTemplate: "Hola {nombre}...", emailTemplate: "Hola {nombre}..." });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/automation', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data: existing } = await supabase
+            .from('news')
+            .select('id')
+            .eq('title', 'SYSTEM_AUTOMATION')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        const payload = {
+            title: 'SYSTEM_AUTOMATION',
+            body: JSON.stringify(req.body),
+            date: new Date().toISOString(),
+            sede_id: sedeId
+        };
+
+        if (existing) {
+            await supabase.from('news').update(payload).eq('id', existing.id);
+        } else {
+            await supabase.from('news').insert(payload);
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/discount-categories', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data, error } = await supabase
+            .from('news')
+            .select('*')
+            .eq('title', 'SYSTEM_DISCOUNT_CATEGORIES')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        if (data && data.body) {
+            return res.json(JSON.parse(data.body));
+        }
+        // Fallback global check
+        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999996).maybeSingle();
+        if (globalData && globalData.body) {
+            return res.json(JSON.parse(globalData.body));
+        }
+        res.json(['Convenio Bomberos', 'Profesor', 'Becados']);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/discount-categories', async (req, res) => {
+    try {
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const { data: existing } = await supabase
+            .from('news')
+            .select('id')
+            .eq('title', 'SYSTEM_DISCOUNT_CATEGORIES')
+            .eq('sede_id', sedeId)
+            .maybeSingle();
+
+        const payload = {
+            title: 'SYSTEM_DISCOUNT_CATEGORIES',
+            body: JSON.stringify(req.body),
+            date: new Date().toISOString(),
+            sede_id: sedeId
+        };
+
+        if (existing) {
+            await supabase.from('news').update(payload).eq('id', existing.id);
+        } else {
+            await supabase.from('news').insert(payload);
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
+// MULTI-TENANT NEW ENDPOINTS
+// ======================================
+
+// Obtener todas las sedes
+app.get('/api/sedes', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('sedes').select('*').order('name', { ascending: true });
+        if (error) throw error;
+        res.json(data || []);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint seguro de Autenticación
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, error: 'Email y contraseña requeridos' });
+        }
+
+        const lowerEmail = email.trim().toLowerCase();
+        const trimmedPass = password.trim();
+
+        // 1. Intentar validar contra la tabla de admins en la base de datos
+        let adminFoundButWrongPass = false;
+        try {
+            const { data: admin, error } = await supabase
+                .from('admins')
+                .select('*')
+                .eq('email', lowerEmail)
+                .maybeSingle();
+
+            if (!error && admin) {
+                if (admin.password_hash === trimmedPass) {
+                    return res.json({
+                        success: true,
+                        role: admin.role, // 'superadmin' o 'admin_sede'
+                        sedeId: admin.sede_id,
+                        email: admin.email
+                    });
+                } else {
+                    // No retornamos 401 inmediatamente en caso de que sea un correo compartido
+                    // o que el usuario también esté en la tabla de alumnos y esté intentando ingresar como alumno.
+                    adminFoundButWrongPass = true;
+                }
+            }
+        } catch (dbErr) {
+            console.error("Admins table check failed or not created yet:", dbErr.message);
+        }
+
+        // 2. Fallback: Logins hardcodeados para superadmins (Compatibilidad)
+        const adminEmails = ['contacto@dpsistemas.cl'];
+        if (trimmedPass === 'admin123' && adminEmails.includes(lowerEmail)) {
+            return res.json({
+                success: true,
+                role: 'superadmin',
+                sedeId: null,
+                email: lowerEmail
+            });
+        }
+
+        // 3. Intentar buscar en la tabla de alumnos (students)
+        const { data: student, error: studentErr } = await supabase
+            .from('students')
+            .select('*')
+            .ilike('email', lowerEmail)
+            .maybeSingle();
+
+        if (!studentErr && student) {
+            if (student.password && student.password.trim().toLowerCase() === trimmedPass.toLowerCase()) {
+                return res.json({
+                    success: true,
+                    role: 'student',
+                    student: {
+                        id: student.id,
+                        name: student.name,
+                        email: student.email,
+                        belt: student.belt || 'WHITE',
+                        isPaid: student.ispaid === true,
+                        plan: student.plan,
+                        monthlyFee: student.monthlyfee,
+                        avatar: student.avatar,
+                        birthDate: student.birthdate,
+                        history: student.history || [],
+                        sedeId: student.sede_id || 1, // Fallback a sede 1 si es nulo
+                        terms_accepted: student.terms_accepted === true
+                    }
+                });
+            }
+        }
+
+        if (adminFoundButWrongPass) {
+            return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+        }
+        return res.status(401).json({ success: false, error: 'Correo o contraseña incorrecta' });
+    } catch (error) {
+        console.error("Login Error:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// --- WHATSAPP API INTEGRATION ENDPOINTS ---
+
+// Auxiliary helper to format Chilean/International phone numbers
+function formatWhatsAppPhone(phone) {
+    if (!phone) return '';
+    let cleaned = phone.replace(/\D/g, '');
+    // If Chilean number starting with 9 (9 digits), append 56
+    if (cleaned.length === 9 && cleaned.startsWith('9')) {
+        cleaned = '56' + cleaned;
+    }
+    return cleaned;
+}
+
+// Check WhatsApp API status
+app.get('/api/whatsapp/status', (req, res) => {
+    const isConfigured = !!(process.env.WHATSAPP_API_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+    res.json({
+        configured: isConfigured,
+        phoneId: process.env.WHATSAPP_PHONE_NUMBER_ID || 'Sin configurar',
+        defaultPhone: process.env.WHATSAPP_DEFAULT_PHONE || '56939601560',
+        mode: isConfigured ? 'PRODUCTION_API' : 'SIMULATION_MODE'
+    });
+});
+
+// Send single WhatsApp message or template
+app.post('/api/whatsapp/send', async (req, res) => {
+    try {
+        const { phone, message, studentName, amount, category } = req.body;
+        if (!phone) {
+            return res.status(400).json({ error: 'Número de teléfono es requerido' });
+        }
+
+        const formattedPhone = formatWhatsAppPhone(phone);
+        const finalMessage = (message || 'Hola {nombre}, te saludamos desde Dojo Ranas Jiu Jitsu.')
+            .replace(/{nombre}/g, studentName || 'Alumno')
+            .replace(/{monto}/g, amount ? `$${Number(amount).toLocaleString('es-CL')}` : '$40.000')
+            .replace(/{categoria}/g, category || 'Oficial IBJJF')
+            .replace(/{dojo}/g, 'Ranas Jiu Jitsu')
+            .replace(/{link_pago}/g, 'https://ranasjiujitsu.cl');
+
+        const token = process.env.WHATSAPP_API_TOKEN;
+        const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+        const apiUrl = process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0';
+
+        // Direct WhatsApp API Call (Meta Cloud API Standard)
+        if (token && phoneId && !token.startsWith('EAAG...')) {
+            const apiRes = await fetch(`${apiUrl}/${phoneId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    recipient_type: 'individual',
+                    to: formattedPhone,
+                    type: 'text',
+                    text: { preview_url: true, body: finalMessage }
+                })
+            });
+            const responseData = await apiRes.json();
+            if (!apiRes.ok) {
+                console.error("❌ WhatsApp API error response:", responseData);
+                return res.status(apiRes.status).json({ error: 'Error enviando mensaje vía WhatsApp API', details: responseData });
+            }
+            console.log(`✅ Mensaje de WhatsApp enviado con éxito a +${formattedPhone}`);
+            return res.json({ success: true, mode: 'LIVE_API', recipient: formattedPhone, message: finalMessage, responseData });
+        } else {
+            // Simulation Mode for local dev / testing without live Meta token
+            console.log(`📱 [WHATSAPP SIMULATOR] Mensaje enviado a +${formattedPhone}:\n"${finalMessage}"`);
+            return res.json({
+                success: true,
+                mode: 'SIMULATION_MODE',
+                recipient: formattedPhone,
+                message: finalMessage,
+                whatsappWebUrl: `https://wa.me/${formattedPhone}?text=${encodeURIComponent(finalMessage)}`
+            });
+        }
+    } catch (error) {
+        console.error("❌ Error enviando WhatsApp:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Broadcast WhatsApp message to multiple students
+app.post('/api/whatsapp/broadcast', async (req, res) => {
+    try {
+        const { studentsList, template } = req.body;
+        if (!Array.isArray(studentsList) || studentsList.length === 0) {
+            return res.status(400).json({ error: 'Lista de alumnos no válida' });
+        }
+
+        const results = [];
+        for (const st of studentsList) {
+            const formattedPhone = formatWhatsAppPhone(st.phone);
+            if (!formattedPhone) continue;
+
+            const finalMessage = (template || 'Hola {nombre}, recordatorio de mensualidad Dojo Ranas.')
+                .replace(/{nombre}/g, st.name || 'Alumno')
+                .replace(/{monto}/g, st.monthlyFee ? `$${Number(st.monthlyFee).toLocaleString('es-CL')}` : '$40.000')
+                .replace(/{link_pago}/g, 'https://ranasjiujitsu.cl');
+
+            results.push({
+                studentId: st.id,
+                name: st.name,
+                phone: formattedPhone,
+                whatsappWebUrl: `https://wa.me/${formattedPhone}?text=${encodeURIComponent(finalMessage)}`
+            });
+        }
+
+        res.json({
+            success: true,
+            totalRecipients: results.length,
+            recipients: results
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log("- MP Token exists:", !!process.env.VITE_MP_ACCESS_TOKEN);
+
+    // Run initial sync on startup to catch any missed payments while server was sleeping
+    setTimeout(async () => {
+        console.log('[STARTUP] Running initial payment sync...');
+        try {
+            const result = await syncTransferPayments();
+            console.log(`[STARTUP] Initial sync complete: ${result.synced} payments synced`);
+        } catch (e) {
+            console.error('[STARTUP] Initial sync failed:', e.message);
+        }
+    }, 5000);
+
+    // Self-ping every 14 minutes to prevent Render from sleeping
+    const BACKEND_URL = process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com';
+    setInterval(() => {
+        fetch(`${BACKEND_URL}/health`)
+            .then(r => r.json())
+            .then(d => console.log(`[KEEP-ALIVE] Ping OK - uptime: ${Math.round(d.uptime)}s`))
+            .catch(e => console.error('[KEEP-ALIVE] Ping failed:', e.message));
+    }, 14 * 60 * 1000); // 14 minutes
+});

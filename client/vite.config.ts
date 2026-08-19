@@ -5,4 +5,7 @@ export default defineConfig({
   plugins: [react()],
   envDir: '../',
   base: process.env.VITE_BASE || '/',
+  build: {
+    sourcemap: false,
+  },
 })

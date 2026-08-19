@@ -172,6 +172,25 @@ import type {
   ClassSlot
 } from './types';
 import { BRAND, avatarSrc, appPath } from './brand';
+
+function isAuthRoute() {
+  const p = window.location.pathname.replace(/\/+$/, '') || '/';
+  return p === appPath('/acceso') || p === appPath('/login');
+}
+
+function goAuthUrl() {
+  const next = appPath('/acceso');
+  if ((window.location.pathname.replace(/\/+$/, '') || '/') !== next) {
+    window.history.pushState({}, '', next);
+  }
+}
+
+function goHomeUrl() {
+  const next = appPath('/') || '/';
+  if (window.location.pathname !== next) {
+    window.history.pushState({}, '', next);
+  }
+}
 import { MpLogo } from './MpLogo';
 import ProductLanding from './ProductLanding';
 import StudentFile from './StudentFile';
@@ -273,12 +292,15 @@ const VIDEO_CATEGORIES = [
 
 const App: React.FC = () => {
   const [isSplashVisible, setIsSplashVisible] = useState(() => {
-    // Show splash only once per session
+    if (typeof window !== 'undefined' && isAuthRoute()) return false;
     const shown = sessionStorage.getItem('splashShown');
     if (!shown) { sessionStorage.setItem('splashShown', '1'); return true; }
     return false;
   });
-  const [viewMode, setViewMode] = useState<ViewMode>(() => localStorage.getItem('viewMode') as ViewMode || 'landing');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== 'undefined' && isAuthRoute()) return 'auth';
+    return (localStorage.getItem('viewMode') as ViewMode) || 'landing';
+  });
   const [noticeData, setNoticeData] = useState({ 
     subject: '', 
     message: ''
@@ -390,6 +412,7 @@ const App: React.FC = () => {
     localStorage.clear();
     localStorage.setItem('__dp_storage_version', DP_STORAGE_VERSION);
     setViewMode('landing');
+    goHomeUrl();
     setRole('guest');
     setCurrentUser(null);
     setNoticeData({ subject: '', message: '' });
@@ -403,6 +426,21 @@ const App: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (viewMode === 'auth') goAuthUrl();
+    if (viewMode === 'landing') goHomeUrl();
+    if (viewMode === 'app' && isAuthRoute()) goHomeUrl();
+  }, [viewMode]);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (isAuthRoute()) setViewMode('auth');
+      else if (viewMode !== 'app') setViewMode('landing');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [viewMode]);
   const [, setActiveNews] = useState(0);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'students' | 'payments' | 'settings' | 'videos' | 'website' | 'communications' | 'schedule' | 'grades' | 'events'>(() => localStorage.getItem('activeTab') as any || 'dashboard');

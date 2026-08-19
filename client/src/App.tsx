@@ -901,6 +901,9 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'B',location:'App.tsx:handleUpdateStudent',message:'ficha put result',data:{id:updatedStudent.id,ok:response.ok,status:response.status,name:payload.name,hasFicha:!!payload.ficha},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (response.ok) {
         const resData = await response.json().catch(() => ({}));
         const mergedStudent = { 
@@ -917,14 +920,17 @@ const App: React.FC = () => {
           setCurrentUser(mergedStudent);
           localStorage.setItem('currentUser', JSON.stringify(mergedStudent));
         }
+        return true;
       } else {
         const errData = await response.json().catch(() => ({}));
         console.error('Server error:', errData);
         alert('❌ Error al guardar los cambios. Revisa la consola.');
+        return false;
       }
     } catch (error) {
       console.error("Error updating student:", error);
       alert('❌ Error de conexión al guardar.');
+      return false;
     }
   };
 

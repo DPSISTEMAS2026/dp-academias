@@ -1,19 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react';
 import {
   ArrowRight,
-  Award,
   ChevronLeft,
   ChevronRight,
-  Clock3,
-  CreditCard,
-  Ticket,
-  LayoutDashboard,
-  Mail,
-  MonitorSmartphone,
-  ScanLine,
-  Smartphone,
-  Users,
-  Video,
 } from 'lucide-react';
 import { BRAND, whatsappHref, asset } from './brand';
 import { MpLogo } from './MpLogo';
@@ -52,24 +41,6 @@ const SLIDES = [
     title: 'Entrada sin lista de papel.',
     text: 'El alumno escanea un QR. El sistema registra la asistencia.',
   },
-];
-
-const LAYERS = [
-  { icon: LayoutDashboard, title: 'Panel de administración', text: 'Desde aquí operas la academia: alumnos, cobros y horarios.' },
-  { icon: MonitorSmartphone, title: 'Página web', text: 'La web pública de tu academia, con tu identidad. El alumno también entra desde el celular.' },
-  { icon: Smartphone, title: 'Alumno', text: 'Reserva, paga y ve su ficha en la página, desde el celular.' },
-];
-
-const SERVICES = [
-  { icon: Clock3, title: 'Horarios', text: 'Armas la grilla una vez. Sirve para el panel, la página y para subir una historia a Instagram.' },
-  { icon: Users, title: 'Alumnos', text: 'Un directorio con la ficha de cada persona: datos, pagos y quién es el apoderado.' },
-  { icon: ScanLine, title: 'Asistencia', text: 'Tus alumnos escanean un QR al asistir. El sistema registra la asistencia.' },
-  { icon: CreditCard, title: 'Finanzas', text: 'El sistema detecta la transferencia. Si pagan en efectivo u otra vía, lo anotas en un botón.' },
-  { icon: Video, title: 'Biblioteca', text: 'Videos y documentos de la clase, publicados una vez y ordenados para el alumno.' },
-  { icon: Award, title: 'Progreso', text: 'El nivel de cada alumno queda en su ficha. No se pierde cuándo avanzó.' },
-  { icon: Ticket, title: 'Eventos', text: 'Seminario, torneo o workshop: inscripción y pago, sin un formulario aparte.' },
-  { icon: Mail, title: 'Comunicaciones', text: 'Escribes un aviso y llega a la página y al correo. Una vez, a todos.' },
-  { icon: MonitorSmartphone, title: 'Página web', text: 'La página de tu academia, con tu identidad. Mostramos lo que necesites.' },
 ];
 
 const STORIES = [

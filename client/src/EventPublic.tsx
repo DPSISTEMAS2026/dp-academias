@@ -177,7 +177,7 @@ export default function EventPublic({ slug, apiUrl }: Props) {
                   </select>
                 </label>
                 <label>Cinturón
-                  <select value={form.belt} onChange={(e) => setForm({ ...form, belt: e.target.value })}>
+                  <select value={form.belt} onChange={(e) => setForm({ ...form, belt: e.target.value as Belt })}>
                     {BELTS.map((b) => <option key={b} value={b}>{b === 'WHITE' ? 'Blanco' : b === 'BLUE' ? 'Azul' : b === 'PURPLE' ? 'Morado' : b === 'BROWN' ? 'Marrón' : b === 'BLACK' ? 'Negro' : 'Gris'}</option>)}
                   </select>
                 </label>

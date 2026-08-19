@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Belt, Student, Video } from './types';
-import { demoAlert } from './demo';
 import PanelTabs from './PanelTabs';
 import './LibraryPanel.css';
 import './panel-shell.css';

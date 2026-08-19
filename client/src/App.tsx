@@ -17,19 +17,11 @@ import {
   Calendar,
   Clock,
   DollarSign,
-  Volume2,
-  VolumeX,
   Mail,
   Lock,
-  Folder,
-  ChevronRight,
   ChevronLeft,
-  Edit2,
-  Save,
   Camera,
-  ImageIcon,
   Monitor,
-  Trash2,
   Phone,
   Ticket
 } from 'lucide-react';
@@ -37,73 +29,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Browser } from '@capacitor/browser';
 import { App as CapApp } from '@capacitor/app';
 
-// Leaf, Mail, Smartphone, LogIn, Menu removed (not used in current design)
-const SocialVideoPlayer: React.FC<{ 
-  src: string, 
-  showSlider?: boolean, 
-  size?: 'sm' | 'lg', 
-  isActive?: boolean, 
-  onEnded?: () => void 
-}> = ({ src, showSlider = true, size = 'sm', isActive = true, onEnded }) => {
-  const [localMute, setLocalMute] = useState(true);
-  const [localVolume, setLocalVolume] = useState(0.2);
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.volume = localVolume;
-  }, [localVolume]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isActive) {
-        videoRef.current.play().catch(err => console.log("Video play interrupted", err));
-      } else {
-        videoRef.current.pause();
-      }
-    }
-  }, [isActive]);
-
-  return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <video
-        ref={videoRef}
-        autoPlay={isActive}
-        muted={localMute}
-        onEnded={onEnded}
-        playsInline
-        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isActive ? 1 : 0.6, transition: 'opacity 0.5s' }}
-      >
-        <source src={src} type="video/mp4" />
-      </video>
-      <div style={{ position: 'absolute', bottom: size === 'lg' ? '20px' : '1rem', right: size === 'lg' ? '20px' : '1rem', display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.6)', padding: size === 'lg' ? '8px 15px' : '5px 10px', borderRadius: '30px', backdropFilter: 'blur(10px)', zIndex: 10, border: '1px solid var(--glass-border)', opacity: isActive ? 1 : 0 }}>
-        <button
-          onClick={(e) => { e.stopPropagation(); setLocalMute(!localMute); }}
-          style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-        >
-          {localMute ? <VolumeX size={size === 'lg' ? 20 : 16} /> : <Volume2 size={size === 'lg' ? 20 : 16} />}
-        </button>
-        {!localMute && showSlider && (
-          <input
-            type="range"
-            min="0" max="1" step="0.01"
-            value={localVolume}
-            onChange={(e) => setLocalVolume(parseFloat(e.target.value))}
-            style={{ width: size === 'lg' ? '80px' : '40px', height: '4px', cursor: 'pointer', accentColor: 'var(--logo-green)' }}
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
 // ─── Splash Screen ───────────────────────────────────────────────────────────
 const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
   useEffect(() => {
     const timer = setTimeout(onFinish, 2600);
     return () => clearTimeout(timer);
   }, [onFinish]);
-
-  const cachedSedeName = localStorage.getItem('activeSedeName') || BRAND.academy;
 
   return (
     <motion.div
@@ -261,7 +192,7 @@ import { planLabel, planWeeklyMax } from './data/plans';
 import { currentRankLabel, formatShortDate, withProgress } from './data/grades';
 import { calculateIBJJFCategory } from './data/ibjjf';
 import BeltPath from './BeltPath';
-import { DEMO_LOCK, demoAlert } from './demo';
+import { demoAlert } from './demo';
 import ModuleBoundary from './ModuleBoundary';
 import DemoGuide from './DemoGuide.tsx';
 
@@ -472,8 +403,7 @@ const App: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const [activeHeroVideo, setActiveHeroVideo] = useState(0);
-  const [activeNews, setActiveNews] = useState(0);
+  const [, setActiveNews] = useState(0);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'students' | 'payments' | 'settings' | 'videos' | 'website' | 'communications' | 'schedule' | 'grades' | 'events'>(() => localStorage.getItem('activeTab') as any || 'dashboard');
 
@@ -512,7 +442,6 @@ const App: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showStudentAccess, setShowStudentAccess] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
-  const [manualPaymentDates, setManualPaymentDates] = useState<Record<string, string>>({});
   const [isGeneratingPayment, setIsGeneratingPayment] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalTarget, setPaymentModalTarget] = useState<Student | Student[] | null>(null);
@@ -566,7 +495,6 @@ const App: React.FC = () => {
   };
   const [videos, setVideos] = useState<Video[]>([]);
   const [isAddingVideo, setIsAddingVideo] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [newVideoData, setNewVideoData] = useState<Omit<Video, 'id'>>({ title: '', description: '', url: '', thumbnail: '', targetAudience: 'BOTH', category: VIDEO_CATEGORIES[0] });
   const [isAddingStudent, setIsAddingStudent] = useState(false);
   const [rawImageForCrop, setRawImageForCrop] = useState<string | null>(null);
@@ -648,8 +576,7 @@ const App: React.FC = () => {
   });
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [isEditingStudent, setIsEditingStudent] = useState(false);
-  const [editedStudent, setEditedStudent] = useState<Student | null>(null);
+  const [, setIsEditingStudent] = useState(false);
   const [studentNewPassword, setStudentNewPassword] = useState('');
 
   // Body scroll lock effect for iOS / Web to prevent background scroll and WebKit crashes
@@ -1253,40 +1180,6 @@ const App: React.FC = () => {
       age--;
     }
     return age;
-  };
-
-  useEffect(() => {
-    if (role !== 'student') return;
-    const audience = calculateAge(currentUser?.birthDate || null) < 18 ? 'KIDS' : 'ADULTS';
-    const days = groupByDay(classSlots, audience);
-  }, [role, classSlots, currentUser?.id]);
-
-  const getUpcomingBirthdays = () => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    return students
-      .filter(s => s.birthDate)
-      .map(s => {
-        const parts = s.birthDate!.split('-');
-        const bMonth = parseInt(parts[1]) - 1;
-        const bDay = parseInt(parts[2]);
-
-        const currentYearBd = new Date(today.getFullYear(), bMonth, bDay);
-        
-        let isToday = false;
-        if (bMonth === today.getMonth() && bDay === today.getDate()) {
-            isToday = true;
-        }
-
-        if (currentYearBd < today && !isToday) currentYearBd.setFullYear(today.getFullYear() + 1);
-        return { ...s, nextBd: currentYearBd, isToday };
-      })
-      .sort((a, b) => {
-          if (a.isToday) return -1;
-          if (b.isToday) return 1;
-          return a.nextBd.getTime() - b.nextBd.getTime();
-      })
-      .slice(0, 5);
   };
 
   const beltLabels: Record<Belt, string> = { WHITE: 'Blanco', BLUE: 'Azul', PURPLE: 'Morado', BROWN: 'Marrón', BLACK: 'Negro', GRAY: 'Gris' };
@@ -3131,9 +3024,6 @@ const App: React.FC = () => {
                             <img
                               src={studentPhoto(student)}
                               alt=""
-                              onLoad={(e) => {
-                                const img = e.currentTarget;
-                              }}
                               onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(student.name); }}
                             />
                           </button>

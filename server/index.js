@@ -2644,6 +2644,10 @@ app.post('/api/auth/login', async (req, res) => {
 
         if (!studentErr && student) {
             if (student.password && student.password.trim().toLowerCase() === trimmedPass.toLowerCase()) {
+                const ficha = pickFicha(student);
+                const compEntry = Array.isArray(student.history) ? student.history.find(h => h && h._competition_info) : null;
+                const weightVal = (student.weight !== undefined && student.weight !== null) ? student.weight : (compEntry ? compEntry.weight : null);
+                const genderVal = student.gender ? student.gender : (compEntry ? compEntry.gender : null);
                 return res.json({
                     success: true,
                     role: 'student',
@@ -2651,15 +2655,20 @@ app.post('/api/auth/login', async (req, res) => {
                         id: student.id,
                         name: student.name,
                         email: student.email,
+                        phone: student.phone || '',
+                        documentId: student.document_id || '',
                         belt: student.belt || 'WHITE',
                         isPaid: student.ispaid === true,
                         plan: student.plan,
                         monthlyFee: student.monthlyfee,
                         avatar: student.avatar,
                         birthDate: student.birthdate,
-                        history: student.history || [],
-                        sedeId: student.sede_id || 1, // Fallback a sede 1 si es nulo
-                        terms_accepted: student.terms_accepted === true
+                        weight: weightVal,
+                        gender: genderVal,
+                        history: stripMetaHistory(student.history),
+                        sedeId: student.sede_id || 1,
+                        terms_accepted: student.terms_accepted === true,
+                        ...ficha,
                     }
                 });
             }

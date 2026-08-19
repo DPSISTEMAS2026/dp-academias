@@ -20,7 +20,15 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.55;
+  opacity: 0.72;
+}
+
+.ep-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5, 8, 17, 0.15) 20%, rgba(5, 8, 17, 0.82) 100%);
+  pointer-events: none;
 }
 
 .ep-hero-copy {
@@ -46,6 +54,8 @@
   line-height: 0.95;
   letter-spacing: -0.04em;
   font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
 }
 
 .ep-meta {

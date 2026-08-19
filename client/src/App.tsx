@@ -178,7 +178,30 @@ function isAuthRoute() {
   return p === appPath('/acceso') || p === appPath('/login');
 }
 
+function isEventRoute() {
+  const p = window.location.pathname.replace(/\/+$/, '') || '/';
+  const prefix = appPath('/evento');
+  return p === prefix || p.startsWith(`${prefix}/`);
+}
+
+function safeEventNext(raw?: string | null) {
+  if (!raw) return '';
+  const path = raw.split('?')[0];
+  const prefix = appPath('/evento');
+  if (path === prefix || path.startsWith(`${prefix}/`)) return path;
+  return '';
+}
+
+function consumeEventLoginNext() {
+  const q = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('next');
+  const stored = typeof window === 'undefined' ? '' : sessionStorage.getItem('eventLoginNext');
+  const next = safeEventNext(q) || safeEventNext(stored);
+  if (next) sessionStorage.removeItem('eventLoginNext');
+  return next;
+}
+
 function goAuthUrl() {
+  if (isEventRoute()) return;
   const next = appPath('/acceso');
   if ((window.location.pathname.replace(/\/+$/, '') || '/') !== next) {
     window.history.pushState({}, '', next);
@@ -186,6 +209,7 @@ function goAuthUrl() {
 }
 
 function goHomeUrl() {
+  if (isEventRoute()) return;
   const next = appPath('/') || '/';
   if (window.location.pathname !== next) {
     window.history.pushState({}, '', next);
@@ -292,7 +316,7 @@ const VIDEO_CATEGORIES = [
 
 const App: React.FC = () => {
   const [isSplashVisible, setIsSplashVisible] = useState(() => {
-    if (typeof window !== 'undefined' && isAuthRoute()) return false;
+    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute())) return false;
     const shown = sessionStorage.getItem('splashShown');
     if (!shown) { sessionStorage.setItem('splashShown', '1'); return true; }
     return false;
@@ -428,6 +452,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (isEventRoute()) return;
     if (viewMode === 'auth') goAuthUrl();
     if (viewMode === 'landing') goHomeUrl();
     if (viewMode === 'app' && isAuthRoute()) goHomeUrl();
@@ -435,6 +460,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const onPop = () => {
+      if (isEventRoute()) return;
       if (isAuthRoute()) setViewMode('auth');
       else if (viewMode !== 'app') setViewMode('landing');
     };
@@ -901,9 +927,6 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'B',location:'App.tsx:handleUpdateStudent',message:'ficha put result',data:{id:updatedStudent.id,ok:response.ok,status:response.status,name:payload.name,hasFicha:!!payload.ficha},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (response.ok) {
         const resData = await response.json().catch(() => ({}));
         const mergedStudent = { 
@@ -914,9 +937,6 @@ const App: React.FC = () => {
         setStudents(prev => prev.map(s => String(s.id) === String(updatedStudent.id) ? mergedStudent : s));
         if (selectedStudent && String(selectedStudent.id) === String(updatedStudent.id)) {
           setSelectedStudent(mergedStudent);
-          // #region agent log
-          fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'E',location:'App.tsx:setSelectedStudent',message:'selectedStudent after save',data:{id:mergedStudent.id,allergies:mergedStudent.allergies||'',tutorName:mergedStudent.tutorName||'',hasNestedFicha:!!mergedStudent.ficha},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
         }
         setIsEditingStudent(false);
         if (currentUser && String(currentUser.id) === String(updatedStudent.id)) {
@@ -1249,15 +1269,26 @@ const App: React.FC = () => {
 
 
   const handleLogin = async (studentToLogin?: Student) => {
-    if (studentToLogin) {
+    const finishStudent = (loggedStudent: Student) => {
       setRole('student');
-      setCurrentUser(studentToLogin);
-      const sId = studentToLogin.sedeId || studentToLogin.sede_id || 1;
+      localStorage.setItem('role', 'student');
+      setCurrentUser(loggedStudent);
+      localStorage.setItem('currentUser', JSON.stringify(loggedStudent));
+      const sId = loggedStudent.sedeId || loggedStudent.sede_id || 1;
       setActiveSedeId(sId);
       localStorage.setItem('activeSedeId', sId.toString());
-      setViewMode('app');
       setMultiStudentAuthOptions([]);
+      const eventNext = consumeEventLoginNext();
+      if (eventNext) {
+        window.location.assign(eventNext);
+        return;
+      }
+      setViewMode('app');
       fetchDataForSede(sId);
+    };
+
+    if (studentToLogin) {
+      finishStudent(studentToLogin);
       return;
     }
 
@@ -1294,15 +1325,7 @@ const App: React.FC = () => {
           if (matchingStudents.length > 1) {
             setMultiStudentAuthOptions(matchingStudents);
           } else {
-            setRole('student');
-            localStorage.setItem('role', 'student');
-            setCurrentUser(loggedStudent);
-            localStorage.setItem('currentUser', JSON.stringify(loggedStudent));
-            const sId = loggedStudent.sedeId || loggedStudent.sede_id || 1;
-            setActiveSedeId(sId);
-            localStorage.setItem('activeSedeId', sId.toString());
-            setViewMode('app');
-            fetchDataForSede(sId);
+            finishStudent(loggedStudent);
           }
         }
       } else {
@@ -4463,23 +4486,24 @@ const AcceptTermsModal: React.FC<{ student: Student, onAccept: () => void }> = (
         >
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '1.2rem', padding: '1rem', fontSize: '0.75rem', color: '#334155', lineHeight: 1.5, whiteSpace: 'pre-line' }}>
             <h4 style={{ textAlign: 'center', margin: '0 0 1rem 0', fontWeight: 900 }}>LIBERACIÓN DE RESPONSABILIDAD</h4>
-            {`CLUB DEPORTIVO SOCIAL Y CULTURAL RANAS JIU JITSU
+            {`${BRAND.academy.toUpperCase()}
+            Documento de ejemplo para esta demo.
 
-            A través de este documento acepto y libero de toda responsabilidad a la Academia Demo, a sus representantes, asociados, recinto que albergue actividades y/o sponsors del club y/o cualquier evento, de responsabilidad ante accidentes que generen lesiones y/o enfermedades, como resultado de mi participación como deportista o espectador en los entrenamientos, competencias y actividades propias de la organización.
-            Por lo cual libero totalmente a la Academia Demo, de ser declarado responsable por lesiones que sucedan durante la práctica de la actividad deportiva o como espectador.
+            A través de este documento acepto y libero de toda responsabilidad a ${BRAND.academy}, a sus representantes, asociados, recinto que albergue actividades y/o sponsors, y a cualquier evento, de responsabilidad ante accidentes que generen lesiones y/o enfermedades, como resultado de mi participación como deportista o espectador en los entrenamientos, competencias y actividades propias de la organización.
+            Por lo cual libero totalmente a ${BRAND.academy} de ser declarado responsable por lesiones que sucedan durante la práctica de la actividad deportiva o como espectador.
 
             Declaro que:
-            1. He leído y acepto las condiciones de participación del Academia Demo también su reglamento y circular de financiamiento.
+            1. He leído y acepto las condiciones de participación de ${BRAND.academy}, su reglamento y circular de financiamiento.
             2. Entiendo que la participación incluye riesgo de lesiones físicas.
-            3. Estoy en conocimiento de alguna condición médica previamente informada en la anamnesis que limite la participación de las actividades del Academia Demo.
+            3. Estoy en conocimiento de alguna condición médica previamente informada en la ficha que limite la participación de las actividades de ${BRAND.academy}.
             4. Poseo cobertura médica para estas actividades.
-            5. Entiendo como apoderado, tutor o participante que en el caso de que exista algún accidente o lesión el Academia Demo y sus representantes proveerán los primeros auxilios básicos, derivando al centro asistencial señalado previamente en la anamnesis, informando al tutor o familiar.
-            6. Acepto que el Academia Demo haga uso de fotografías, video o cualquier otra forma de broadcast, para efectos de promoción nacional e internacional.
-            7. A través de mi firma en este documento acepto toda responsabilidad de mis acciones en relación con mi participación del Academia Demo.
+            5. Entiendo como apoderado, tutor o participante que, en caso de accidente o lesión, ${BRAND.academy} y sus representantes proveerán los primeros auxilios básicos, derivando al centro asistencial señalado en la ficha e informando al tutor o familiar.
+            6. Acepto que ${BRAND.academy} haga uso de fotografías, video o cualquier otra forma de difusión, para efectos de promoción.
+            7. A través de mi firma en este documento acepto toda responsabilidad de mis acciones en relación con mi participación en ${BRAND.academy}.
             8. Acepto la responsabilidad por mis posesiones y equipo deportivo durante los entrenamientos.
-            9. A través de este documento libero de toda responsabilidad a la Academia Demo y a sus representantes, voluntarios, sponsors, directores, miembros, empleados, agentes y administradores de toda compensación o prosecución relacionada a las actividades del club de las cuales pueda resultar lesionado y/o accidentado.
+            9. A través de este documento libero de toda responsabilidad a ${BRAND.academy} y a sus representantes, voluntarios, sponsors, directores, miembros, empleados, agentes y administradores de toda compensación o prosecución relacionada a las actividades de la academia de las cuales pueda resultar lesionado y/o accidentado.
             10. Libero de toda responsabilidad, posible persecución y responsabilidad económica o demandas de compensación a los organizadores por pérdida de posesiones personales o equipamiento deportivo.
-            11. Acepto subir y permitir el uso de una fotografía de mi rostro (foto de perfil) con el fin exclusivo de permitir mi correcta identificación por parte del personal administrativo y los profesores del club en los registros internos.`}
+            11. Acepto subir y permitir el uso de una fotografía de mi rostro (foto de perfil) con el fin exclusivo de permitir mi correcta identificación por parte del personal administrativo y los profesores en los registros internos.`}
           </div>
         </div>
 

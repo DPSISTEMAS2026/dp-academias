@@ -81,9 +81,6 @@ export default function StudentFile({
     setDraft(student);
     setTab('datos');
     setSaveHint('');
-    // #region agent log
-    fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'A',location:'StudentFile.tsx:open',message:'ficha draft reset on id',data:{id:student.id,tab:'datos'},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }, [student.id]);
 
   const setField = <K extends keyof Student>(key: K, value: Student[K]) => {
@@ -91,18 +88,11 @@ export default function StudentFile({
   };
 
   const saveFicha = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'C',location:'StudentFile.tsx:save',message:'guardar click',data:{id:draft.id,name:draft.name,phone:draft.phone||'',allergies:draft.allergies||'',tutorName:draft.tutorName||'',tab},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setSaving(true);
     setSaveHint('');
     try {
       const result = await onSave(draft);
-      const ok = result !== false;
-      // #region agent log
-      fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'D',location:'StudentFile.tsx:save-result',message:'guardar resultado',data:{id:draft.id,ok,resultType:typeof result,hint:ok?'Ficha guardada':'No se pudo guardar'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setSaveHint(ok ? 'Ficha guardada' : 'No se pudo guardar');
+      setSaveHint(result === false ? 'No se pudo guardar' : 'Ficha guardada');
     } catch {
       setSaveHint('No se pudo guardar');
     } finally {

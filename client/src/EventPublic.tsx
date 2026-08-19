@@ -43,6 +43,35 @@ export default function EventPublic({ slug, apiUrl }: Props) {
   const [done, setDone] = useState<EventRegistration | null>(null);
   const [sending, setSending] = useState(false);
 
+  const fillFromStudent = (s: Student) => ({
+    name: s.name || '',
+    email: s.email || '',
+    phone: s.phone || '',
+    documentId: s.documentId || '',
+    birthDate: s.birthDate || '',
+    weight: s.weight ? String(s.weight) : '',
+    gender: s.gender || '',
+    belt: s.belt || 'WHITE',
+    academy: '',
+  });
+
+  useEffect(() => {
+    if (!student) return;
+    setKind('student');
+    setForm(fillFromStudent(student));
+  }, [student?.id]);
+
+  const goAsStudent = () => {
+    if (student) {
+      setKind('student');
+      setForm(fillFromStudent(student));
+      return;
+    }
+    const next = appPath(`/evento/${slug}`);
+    sessionStorage.setItem('eventLoginNext', next);
+    window.location.assign(`${appPath('/acceso')}?next=${encodeURIComponent(next)}`);
+  };
+
   useEffect(() => {
     fetch(`${apiUrl}/api/events/public/${slug}`)
       .then(async (r) => {
@@ -156,9 +185,12 @@ export default function EventPublic({ slug, apiUrl }: Props) {
               <h2>Inscripción</h2>
               <p style={{ marginBottom: 14 }}>Completa tus datos. Si hay costo, Mercado Pago confirma el pago y quedas inscrito.</p>
               <div className="ep-tabs">
-                <button type="button" className={kind === 'student' ? 'is-on' : ''} onClick={() => setKind('student')}>Soy alumno</button>
+                <button type="button" className={kind === 'student' ? 'is-on' : ''} onClick={goAsStudent}>Soy alumno</button>
                 <button type="button" className={kind === 'guest' ? 'is-on' : ''} onClick={() => setKind('guest')}>Vengo de otra academia</button>
               </div>
+              {kind === 'student' && student && (
+                <p style={{ marginBottom: 10, fontWeight: 700, color: '#006970' }}>Inscripción con la ficha de {student.name}.</p>
+              )}
               {kind === 'student' && !student && (
                 <p className="ep-err" style={{ marginBottom: 10 }}>Inicia sesión para usar tu ficha, o completa los datos como invitado.</p>
               )}

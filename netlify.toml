@@ -1,23 +1,19 @@
 [build]
   base = "client"
-  command = "npm install && npm run build"
-  publish = "dist"
+  command = "npm install && npm run build && mkdir -p dist-netlify/academias && cp -a dist/. dist-netlify/academias/"
+  publish = "dist-netlify"
 
 [build.environment]
   VITE_BASE = "/academias/"
 
-# Si este sitio se publica en la raíz (otro Netlify) y el HTML pide /academias/...
+# Vite pide /academias/...; el build queda en esa carpeta para que logos y mockups existan.
 [[redirects]]
-  from = "/academias/assets/*"
-  to = "/assets/:splat"
-  status = 200
+  from = "/"
+  to = "/academias/"
+  status = 302
 
+# Sin force: si el archivo existe (png, svg, js) Netlify lo sirve; si no, es la SPA.
 [[redirects]]
   from = "/academias/*"
-  to = "/index.html"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
+  to = "/academias/index.html"
   status = 200

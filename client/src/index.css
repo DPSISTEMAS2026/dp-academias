@@ -1,10 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Shojumaru&family=Luckiest+Guy&family=Bangers&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  /* Core Brand Palette */
-  --logo-green: #05a86a;
-  --logo-green-bright: #10f49c;
-  --logo-green-soft: rgba(5, 168, 106, 0.08);
+  /* DP Sistemas · teal del logo (no usar el verde de Ranas) */
+  --logo-green: #006970;
+  --logo-green-bright: #1aa3ab;
+  --logo-green-soft: rgba(0, 105, 112, 0.1);
+  --brand-teal: #006970;
 
   /* Clean Light Theme Variables */
   --panel-bg: #ffffff;
@@ -17,8 +18,8 @@
   --panel-muted-soft: #94a3b8;
   --panel-card: #ffffff;
   --panel-card-hover: #f1f5f9;
-  --panel-green-bg: rgba(5, 168, 106, 0.06);
-  --panel-green-border: rgba(5, 168, 106, 0.2);
+  --panel-green-bg: rgba(0, 105, 112, 0.08);
+  --panel-green-border: rgba(0, 105, 112, 0.28);
   --panel-red-bg: #fef2f2;
   --panel-red-border: #fecaca;
   --panel-purple-bg: #f5f3ff;
@@ -35,7 +36,7 @@
   --text-muted: #64748b;
   --glass-border: rgba(0, 0, 0, 0.06);
   --shadow-main: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --tatami-black: #0f172a;
+  --tatami-black: #0B1220;
   --bg-subtle: #f8fafc;
 
   /* System constants */
@@ -80,8 +81,40 @@
 }
 
 ::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
   background: var(--logo-green);
-  border-radius: 10px;
+}
+
+.mp-logo {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+html:has(.dp-landing),
+html.dp-on-landing {
+  background: #f4f2ee;
+  scrollbar-color: #2a2a2a #f4f2ee;
+}
+
+html:has(.dp-landing) body,
+html.dp-on-landing body {
+  background: #f4f2ee;
+}
+
+html:has(.dp-landing)::-webkit-scrollbar-track,
+html.dp-on-landing::-webkit-scrollbar-track {
+  background: #f4f2ee;
+}
+
+html:has(.dp-landing)::-webkit-scrollbar-thumb,
+html.dp-on-landing::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
 }
 
 .hover-light:hover {
@@ -125,7 +158,7 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background: url("https://grainy-gradients.vercel.app/noise.svg");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
   opacity: 0.03;
   pointer-events: none;
   z-index: 9999;
@@ -307,7 +340,7 @@ section {
   flex: 1;
   padding: 4rem 8% !important;
   background: var(--bg-subtle);
-  margin-left: 260px;
+  margin-left: 268px;
   /* Space for fixed sidebar on desktop */
   min-height: 100vh;
 }
@@ -323,10 +356,14 @@ section {
 }
 
 .sidebar {
-  width: 260px;
+  width: 268px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #fff;
+  border-right: 1px solid rgba(22, 22, 22, 0.08);
+  font-family: Outfit, system-ui, sans-serif;
+  color: #161616;
 }
 
 
@@ -343,7 +380,7 @@ section {
     height: 100dvh !important; /* respeta barra de navegación del SO en iOS/Android */
     height: 100vh !important;  /* fallback */
     z-index: 999;
-    background: #060606 !important;
+    background: #fff !important;
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
@@ -388,18 +425,12 @@ section {
   border-color: var(--logo-green);
 }
 
-.font-cartoon {
-  font-family: 'Luckiest Guy', cursive;
-}
-
-.font-martial {
-  font-family: 'Shojumaru', cursive;
-  letter-spacing: 0.1em;
-}
-
+.font-cartoon,
+.font-martial,
 .font-comic {
-  font-family: 'Bangers', cursive;
-  letter-spacing: 0.05em;
+  font-family: Outfit, system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  font-weight: 700;
 }
 
 .pop-text {
@@ -412,8 +443,9 @@ section {
   border: 4px solid var(--tatami-black);
   padding: 1rem 2rem;
   border-radius: 1rem;
-  font-family: 'Luckiest Guy', cursive;
-  font-size: 1.2rem;
+  font-family: Outfit, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
   cursor: pointer;
   box-shadow: 6px 6px 0px var(--tatami-black);
   transition: all 0.1s;
@@ -675,18 +707,39 @@ section {
   overflow: hidden !important;
   border-radius: 50% !important;
   flex-shrink: 0 !important;
+  cursor: pointer;
 }
 
 .strict-avatar-container img {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover !important;
+  object-position: 50% 18% !important;
   display: block !important;
   max-width: none !important;
   max-height: none !important;
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
+}
+
+.dp-avatar-btn {
+  display: inline-flex;
+  padding: 0;
+  border: 1px solid rgba(22, 22, 22, 0.1);
+  background: #fff;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+.dp-avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  display: block;
 }
 
 /* Premium dynamic loading spinner */

@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'cl.ranasjiujitsu.ranapp',
-  appName: 'Ranapp',
+  appId: 'cl.dpsistemas.demo',
+  appName: 'DP Sistemas',
   webDir: 'dist'
 };
 

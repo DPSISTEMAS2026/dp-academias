@@ -8,14 +8,142 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
 import { DateTime } from 'luxon';
+import { calculateIBJJFCategory } from './ibjjf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '../.env'), override: true });
+
+const FORBIDDEN_SUPABASE = ['qbimxygcjjmosifsqbko', 'xtcxbxvbtxnmuaylrhmr'];
+const supabaseUrl = process.env.SUPABASE_URL || '';
+if (FORBIDDEN_SUPABASE.some((id) => supabaseUrl.includes(id))) {
+    console.error('REFUSING TO START: SUPABASE_URL apunta a Ranas (producción o backup). Usa el proyecto demo.');
+    process.exit(1);
+}
+
+const DEMO_LOCK = process.env.DEMO_LOCK !== 'false';
+const DEMO_MSG = {
+    students: 'En la demo no se pueden borrar alumnos. El recorrido usa el mismo seed.',
+    classes: 'En la demo no se pueden borrar clases del horario. Sí se pueden editar o añadir.',
+    videos: 'En la demo no se puede borrar el material.',
+    website: 'En la demo no se borra el contenido del sitio.',
+    events: 'En la demo no se borra el evento de muestra. Sí se puede editar, publicar e inscribir.',
+};
+function demoForbidden(res, kind) {
+    return res.status(403).json({ error: DEMO_MSG[kind] || 'Acción bloqueada en la demo.', demoLocked: true });
+}
+
+const BRAND = {
+    academy: process.env.ACADEMY_NAME || 'Academia Demo',
+    company: 'DP Sistemas y Automatizaciones',
+    url: process.env.FRONTEND_URL || 'https://dpsistemas.cl',
+    email: process.env.CONTACT_EMAIL || 'contacto@dpsistemas.cl',
+    color: '#006970'
+};
+
+function parseBelts(raw, fallback) {
+    if (Array.isArray(raw) && raw.length) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length) return parsed;
+        } catch (_) {}
+        return [raw];
+    }
+    return fallback ? [fallback] : [];
+}
+
+function mapVideo(v) {
+    const belts = parseBelts(v.belts, v.beltlevel);
+    return {
+        id: v.id,
+        title: v.title,
+        description: v.description,
+        url: v.url,
+        thumbnail: v.thumbnail,
+        beltLevel: v.beltlevel,
+        category: v.category,
+        sedeId: v.sede_id,
+        format: v.format || 'video',
+        discipline: v.discipline || 'Jiu Jitsu',
+        belts,
+        authorizedOnly: v.authorized_only !== false,
+        duration: v.duration || '',
+        targetAudience: 'BOTH',
+    };
+}
+
+function mapMaterialProgress(row) {
+    return {
+        id: row.id,
+        studentId: row.student_id,
+        videoId: row.video_id,
+        progress: Number(row.progress) || 0,
+        views: Number(row.views) || 0,
+        saved: !!row.saved,
+    };
+}
+
+function normalizeFicha(raw) {
+    const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    return {
+        tutorName: src.tutorName || '',
+        tutorEmail: src.tutorEmail || '',
+        tutorPhone: src.tutorPhone || '',
+        tutorRelation: src.tutorRelation || '',
+        emergencyName: src.emergencyName || '',
+        emergencyPhone: src.emergencyPhone || '',
+        emergencyRelation: src.emergencyRelation || '',
+        allergies: src.allergies || '',
+        discipline: src.discipline || '',
+    };
+}
+
+function pickFicha(s) {
+    if (s && s.ficha && typeof s.ficha === 'object' && !Array.isArray(s.ficha) && Object.keys(s.ficha).length) {
+        return normalizeFicha(s.ficha);
+    }
+    const hist = Array.isArray(s?.history) ? s.history : [];
+    const row = hist.find((h) => h && h._ficha);
+    if (!row) return normalizeFicha({});
+    const { _ficha, ...rest } = row;
+    return normalizeFicha(rest);
+}
+
+function normalizeProgress(raw) {
+    const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const history = Array.isArray(src.history) ? src.history : [];
+    return {
+        stripes: Number(src.stripes) || 0,
+        techniquesDone: Number(src.techniquesDone) || 0,
+        techniquesTotal: Number(src.techniquesTotal) || 20,
+        evaluation: Number(src.evaluation) || 0,
+        evaluationDate: src.evaluationDate || '',
+        notes: src.notes || '',
+        history,
+    };
+}
+
+function pickProgress(s) {
+    if (s && s.progress && typeof s.progress === 'object' && !Array.isArray(s.progress)) {
+        return normalizeProgress(s.progress);
+    }
+    const hist = Array.isArray(s?.history) ? s.history : [];
+    const row = hist.find((h) => h && h._progress);
+    if (!row) return null;
+    const { _progress, ...rest } = row;
+    return normalizeProgress(rest);
+}
+
+function stripMetaHistory(history) {
+    return Array.isArray(history) ? history.filter((h) => h && !h._competition_info && !h._ficha && !h._progress) : [];
+}
+
 
 import { createClient } from '@supabase/supabase-js';
-const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_ANON_KEY || '');
+const supabase = createClient(supabaseUrl, process.env.SUPABASE_ANON_KEY || '');
 
 
 const app = express();
@@ -37,9 +165,10 @@ async function getMPClientForSede(sedeId) {
                 .eq('id', Number(sedeId))
                 .maybeSingle();
 
-            if (!error && sedeRecord && sedeRecord.mp_access_token) {
+            const sedeToken = sedeRecord?.mp_access_token || '';
+            if (!error && sedeToken && !sedeToken.startsWith('APP_USR')) {
                 return new MercadoPagoConfig({
-                    accessToken: sedeRecord.mp_access_token,
+                    accessToken: sedeToken,
                     options: { timeout: 5000 }
                 });
             }
@@ -47,11 +176,10 @@ async function getMPClientForSede(sedeId) {
             console.error(`[MP-CLIENT] Error fetching token for Sede ${sedeId}:`, e.message);
         }
     }
-    // Si es la Sede 1 (Concepción), permitimos el fallback a las credenciales globales (Manuel)
-    if (Number(sedeId) === 1) {
+    const globalToken = process.env.VITE_MP_ACCESS_TOKEN || '';
+    if (Number(sedeId) === 1 && globalToken && !globalToken.startsWith('APP_USR')) {
         return client;
     }
-    // Para cualquier otra sede, si no tiene tokens configurados, NO permitimos pagar (retornamos null)
     return null;
 }
 
@@ -239,16 +367,7 @@ app.get('/api/videos', async (req, res) => {
         }
         const { data, error } = await query;
         if (error) throw error;
-        const formatted = (data || []).map(v => ({
-            id: v.id,
-            title: v.title,
-            description: v.description,
-            url: v.url,
-            thumbnail: v.thumbnail,
-            beltLevel: v.beltlevel,
-            category: v.category,
-            sedeId: v.sede_id
-        }));
+        const formatted = (data || []).map(mapVideo);
         res.json(formatted);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -259,25 +378,68 @@ app.post('/api/videos', async (req, res) => {
     try {
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : (req.body.sedeId ? Number(req.body.sedeId) : null);
         const newId = Date.now().toString();
+        const belts = parseBelts(req.body.belts, req.body.beltLevel);
         const newVideo = { 
             id: newId,
             title: req.body.title,
-            description: req.body.description,
+            description: req.body.description || '',
             url: req.body.url,
-            thumbnail: req.body.thumbnail,
-            beltlevel: req.body.beltLevel,
-            category: req.body.category,
-            sede_id: targetSedeId
+            thumbnail: req.body.thumbnail || '',
+            beltlevel: belts[0] || req.body.beltLevel || 'WHITE',
+            category: req.body.category || 'Técnicas',
+            sede_id: targetSedeId,
+            format: req.body.format || 'video',
+            discipline: req.body.discipline || 'Jiu Jitsu',
+            belts,
+            authorized_only: req.body.authorizedOnly !== false,
+            duration: req.body.duration || ''
         };
         const { error } = await supabase.from('videos').insert(newVideo);
         if (error) throw error;
-        res.status(201).json({ ...req.body, id: newId, sedeId: targetSedeId });
+        res.status(201).json(mapVideo({ ...newVideo, sede_id: targetSedeId }));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/material-progress', async (req, res) => {
+    try {
+        let query = supabase.from('material_progress').select('*');
+        if (req.query.videoId) query = query.eq('video_id', req.query.videoId);
+        if (req.query.studentId) query = query.eq('student_id', req.query.studentId);
+        const { data, error } = await query;
+        if (error) throw error;
+        const rows = (data || []).map(mapMaterialProgress);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/material-progress', async (req, res) => {
+    try {
+        const studentId = String(req.body.studentId || '');
+        const videoId = String(req.body.videoId || '');
+        if (!studentId || !videoId) return res.status(400).json({ error: 'Faltan alumno o material.' });
+        const row = {
+            id: `${studentId}-${videoId}`,
+            student_id: studentId,
+            video_id: videoId,
+            progress: Math.max(0, Math.min(100, Number(req.body.progress) || 0)),
+            views: Math.max(0, Number(req.body.views) || 0),
+            saved: !!req.body.saved,
+            updated_at: new Date().toISOString(),
+        };
+        const { data, error } = await supabase.from('material_progress').upsert(row, { onConflict: 'id' }).select().single();
+        if (error) throw error;
+        res.json(mapMaterialProgress(data || row));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 app.delete('/api/videos/:id', async (req, res) => {
+    if (DEMO_LOCK) return demoForbidden(res, 'videos');
     try {
         const { id } = req.params;
         const { error } = await supabase.from('videos').delete().eq('id', id);
@@ -310,6 +472,13 @@ app.get('/api/news', async (req, res) => {
 app.post('/api/news', async (req, res) => {
     try {
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        const newsBody = Array.isArray(req.body) ? req.body : [req.body];
+        if (DEMO_LOCK) {
+            let cur = supabase.from('news').select('id').not('title', 'like', 'SYSTEM_%').lt('id', 999900);
+            cur = targetSedeId ? cur.eq('sede_id', targetSedeId) : cur.is('sede_id', null);
+            const { data: existing } = await cur;
+            if ((existing || []).length > newsBody.length) return demoForbidden(res, 'website');
+        }
         // Borrar noticias previas, protegiendo las configuraciones de sistema (SYSTEM_*) y las tarjetas de cumpleaños (ID >= 999900)
         let deleteQuery = supabase.from('news')
             .delete()
@@ -324,7 +493,6 @@ app.post('/api/news', async (req, res) => {
         }
         await deleteQuery;
 
-        const newsBody = Array.isArray(req.body) ? req.body : [req.body];
         const newsWithSede = newsBody.map(item => ({
             ...item,
             sede_id: targetSedeId
@@ -357,6 +525,13 @@ app.get('/api/gallery', async (req, res) => {
 app.post('/api/gallery', async (req, res) => {
     try {
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        const galleryBody = Array.isArray(req.body) ? req.body : [req.body];
+        if (DEMO_LOCK) {
+            let cur = supabase.from('gallery').select('id');
+            cur = targetSedeId ? cur.eq('sede_id', targetSedeId) : cur.is('sede_id', null);
+            const { data: existing } = await cur;
+            if ((existing || []).length > galleryBody.length) return demoForbidden(res, 'website');
+        }
         let deleteQuery = supabase.from('gallery').delete().neq('id', 0);
         if (targetSedeId) {
             deleteQuery = deleteQuery.eq('sede_id', targetSedeId);
@@ -365,7 +540,6 @@ app.post('/api/gallery', async (req, res) => {
         }
         await deleteQuery;
 
-        const galleryBody = Array.isArray(req.body) ? req.body : [req.body];
         const galleryWithSede = galleryBody.map(item => ({
             ...item,
             sede_id: targetSedeId
@@ -385,6 +559,11 @@ app.get('/api/hero-videos', (req, res) => {
 });
 
 app.post('/api/hero-videos', (req, res) => {
+    if (DEMO_LOCK) {
+        const next = Array.isArray(req.body) ? req.body : [];
+        const prev = readData(heroVideosFile);
+        if (Array.isArray(prev) && next.length < prev.length) return demoForbidden(res, 'website');
+    }
     writeData(heroVideosFile, req.body);
     res.status(200).json(req.body);
 });
@@ -431,7 +610,7 @@ app.get('/api/students', async (req, res) => {
         if (birthdayStudents.length > 0) {
             const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
             const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
-            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su Dojo Ranas! 🥋🐸`;
+            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su ${BRAND.academy}! `;
             
             // Verificamos si el aviso ya existe para hoy para evitar actualizaciones innecesarias
             const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
@@ -454,9 +633,11 @@ app.get('/api/students', async (req, res) => {
 
         const formatted = updatedData.map(s => {
             const compEntry = Array.isArray(s.history) ? s.history.find(h => h && h._competition_info) : null;
-            const cleanHistory = Array.isArray(s.history) ? s.history.filter(h => h && !h._competition_info) : [];
+            const cleanHistory = stripMetaHistory(s.history);
             const weightVal = (s.weight !== undefined && s.weight !== null) ? s.weight : (compEntry ? compEntry.weight : null);
             const genderVal = s.gender ? s.gender : (compEntry ? compEntry.gender : null);
+            const ficha = pickFicha(s);
+            const progress = pickProgress(s);
 
             return {
                 id: s.id,
@@ -480,10 +661,13 @@ app.get('/api/students', async (req, res) => {
                 joinDate: s.joindate || null,
                 lastGrade: s.lastgrade || null,
                 graduationDate: s.graduationdate || null,
+                evaluationDate: progress?.evaluationDate || null,
                 weight: weightVal,
                 gender: genderVal,
                 sedeId: s.sede_id || 1,
-                sede_id: s.sede_id || 1
+                sede_id: s.sede_id || 1,
+                ...ficha,
+                progress: progress || undefined,
             };
         });
 
@@ -592,7 +776,8 @@ app.post('/api/students', async (req, res) => {
             joindate: req.body.joinDate || null,
             lastgrade: req.body.lastGrade || null,
             graduationdate: req.body.graduationDate || null,
-            sede_id: req.body.sedeId ? Number(req.body.sedeId) : 1
+            sede_id: req.body.sedeId ? Number(req.body.sedeId) : 1,
+            ficha: normalizeFicha(req.body.ficha || req.body)
         };
         const { error } = await supabase.from('students').insert(newStudent);
         if (error) throw error;
@@ -611,17 +796,17 @@ app.post('/api/students', async (req, res) => {
                 const html = `
                     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                         <div style="text-align: center; margin-bottom: 2rem;">
-                            <h2 style="color: #05a86a; margin-top: 1rem; font-size: 1.8rem;">¡Hola ${newStudent.name}!</h2>
-                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te damos la bienvenida al portal oficial de alumnos del <strong>Dojo Ranas</strong>.</p>
+                            <h2 style="color: ${BRAND.color}; margin-top: 1rem; font-size: 1.8rem;">¡Hola ${newStudent.name}!</h2>
+                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te damos la bienvenida al portal oficial de alumnos del <strong>${BRAND.academy}</strong>.</p>
                         </div>
                         
                         <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
                             <p style="margin: 0 0 1rem 0; font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em;">TUS DATOS DE ACCESO:</p>
                             <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Email:</strong> ${newStudent.email}</p>
-                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.password}</span></p>
-                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Tu ID de Alumno:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.id}</span> (Úsalo en la glosa al transferir)</p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: ${BRAND.color}; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.password}</span></p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Tu ID de Alumno:</strong> <span style="background: ${BRAND.color}; color: #fff; padding: 2px 8px; border-radius: 6px;">${newStudent.id}</span> (Úsalo en la glosa al transferir)</p>
                             
-                            <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                            <a href="${BRAND.url}" style="display: block; background: ${BRAND.color}; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(22,196,122,0.2);">ENTRAR AL PORTAL 🥋</a>
                         </div>
 
                         <div style="margin-top: 2rem;">
@@ -636,14 +821,14 @@ app.post('/api/students', async (req, res) => {
 
                         <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-top: 3rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
                             Te aconsejamos cambiar tu contraseña en la sección <strong>Mi Perfil</strong> al ingresar.<br>
-                            <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                            <strong>${BRAND.academy}</strong> - 
                         </p>
                     </div>
                 `;
                 transporter.sendMail({
-                    from: '"Dojo Ranas 🐸" <' + (process.env.SMTP_FROM || smtpUser) + '>',
+                    from: `"${BRAND.academy}" <${process.env.SMTP_FROM || smtpUser}>`,
                     to: newStudent.email,
-                    subject: 'Tus credenciales de acceso - Dojo Ranas 🐸',
+                    subject: `Tus credenciales de acceso - ${BRAND.academy}`,
                     html
                 }).then(() => console.log(`✅ Email enviado a ${newStudent.email}`))
                   .catch(err => console.error("❌ Auto Welcome Mail Error:", err.message));
@@ -683,8 +868,23 @@ app.put('/api/students/:id', async (req, res) => {
         if (req.body.sedeId !== undefined) updateData.sede_id = req.body.sedeId ? Number(req.body.sedeId) : null;
         if (req.body.sede_id !== undefined) updateData.sede_id = req.body.sede_id ? Number(req.body.sede_id) : null;
 
+        const incomingFicha = req.body.ficha !== undefined
+            ? normalizeFicha(req.body.ficha)
+            : (req.body.tutorName !== undefined || req.body.emergencyName !== undefined || req.body.allergies !== undefined || req.body.discipline !== undefined
+                ? normalizeFicha(req.body)
+                : null);
+        if (incomingFicha) updateData.ficha = incomingFicha;
+
+        const incomingProgress = req.body.progress !== undefined ? normalizeProgress(req.body.progress) : null;
+        if (incomingProgress) updateData.progress = incomingProgress;
+
         // Recuperar registro previo para preservar competition_info de forma indestructible en history JSONB
-        const { data: currentSt } = await supabase.from('students').select('history, weight, gender').eq('id', req.params.id).maybeSingle();
+        const { data: currentStSel, error: currentStErr } = await supabase.from('students').select('history, weight, gender, ficha, progress').eq('id', req.params.id).maybeSingle();
+        let currentSt = currentStSel;
+        if (currentStErr) {
+            const retrySel = await supabase.from('students').select('history, weight, gender').eq('id', req.params.id).maybeSingle();
+            currentSt = retrySel.data;
+        }
         
         let currentHist = Array.isArray(req.body.history) ? [...req.body.history] : (currentSt && Array.isArray(currentSt.history) ? [...currentSt.history] : []);
         let existingComp = (currentSt && Array.isArray(currentSt.history)) ? currentSt.history.find(h => h && h._competition_info) : null;
@@ -693,7 +893,7 @@ app.put('/api/students/:id', async (req, res) => {
         const finalWeight = req.body.weight !== undefined ? (req.body.weight ? Number(req.body.weight) : null) : (compEntry ? compEntry.weight : (existingComp ? existingComp.weight : null));
         const finalGender = req.body.gender !== undefined ? req.body.gender : (compEntry ? compEntry.gender : (existingComp ? existingComp.gender : null));
 
-        currentHist = currentHist.filter(h => h && !h._competition_info);
+        currentHist = currentHist.filter(h => h && !h._competition_info && !h._ficha && !h._progress);
         if (finalWeight !== null || finalGender !== null) {
             currentHist.push({
                 _competition_info: true,
@@ -701,15 +901,21 @@ app.put('/api/students/:id', async (req, res) => {
                 gender: finalGender
             });
         }
+        const persistedFicha = incomingFicha || pickFicha({ ficha: currentSt?.ficha, history: currentSt?.history });
+        currentHist.push({ _ficha: true, ...persistedFicha });
+        const persistedProgress = incomingProgress || pickProgress({ progress: currentSt?.progress, history: currentSt?.history });
+        if (persistedProgress) currentHist.push({ _progress: true, ...persistedProgress });
         updateData.history = currentHist;
 
         console.log(`PUT /api/students/${req.params.id}`, JSON.stringify(updateData));
         let { error } = await supabase.from('students').update(updateData).eq('id', req.params.id);
-        if (error && (error.message.includes('weight') || error.message.includes('gender') || error.code === 'PGRST204')) {
-            console.warn('Supabase update warning (stripping weight/gender columns if not yet in DB schema):', error.message);
+        if (error && (error.message.includes('weight') || error.message.includes('gender') || error.message.includes('ficha') || error.message.includes('progress') || error.code === 'PGRST204')) {
+            console.warn('Supabase update warning (stripping optional columns if not yet in DB schema):', error.message);
             const fallbackData = { ...updateData };
             delete fallbackData.weight;
             delete fallbackData.gender;
+            delete fallbackData.ficha;
+            delete fallbackData.progress;
             const retryRes = await supabase.from('students').update(fallbackData).eq('id', req.params.id);
             error = retryRes.error;
         }
@@ -721,8 +927,10 @@ app.put('/api/students/:id', async (req, res) => {
             ...req.body, 
             id: req.params.id, 
             weight: finalWeight, 
-            gender: finalGender, 
-            history: currentHist.filter(h => h && !h._competition_info) 
+            gender: finalGender,
+            ...persistedFicha,
+            progress: persistedProgress || undefined,
+            history: currentHist.filter(h => h && !h._competition_info && !h._ficha && !h._progress) 
         });
     } catch (error) {
         console.error('PUT student error:', error.message);
@@ -731,6 +939,7 @@ app.put('/api/students/:id', async (req, res) => {
 });
 
 app.delete('/api/students/:id', async (req, res) => {
+    if (DEMO_LOCK) return demoForbidden(res, 'students');
     try {
         const { error } = await supabase.from('students').delete().eq('id', req.params.id);
         if (error) throw error;
@@ -898,7 +1107,7 @@ app.post('/api/checkout', async (req, res) => {
             const price = withSurcharge ? calculateSurcharge(base).chargeAmount : base;
             return {
                 id: s.id,
-                title: `Mensualidad Fam. Ranas - ${s.name}`,
+                title: `Mensualidad ${BRAND.academy} - ${s.name}`,
                 quantity: 1,
                 currency_id: 'CLP',
                 unit_price: price
@@ -906,7 +1115,7 @@ app.post('/api/checkout', async (req, res) => {
         }) : [
             {
                 id: student.id,
-                title: `Mensualidad Dojo Ranas - ${student.name}`,
+                title: `Mensualidad ${BRAND.academy} - ${student.name}`,
                 quantity: 1,
                 currency_id: 'CLP',
                 unit_price: withSurcharge ? calculateSurcharge(Number(amount)).chargeAmount : Number(amount)
@@ -924,7 +1133,7 @@ app.post('/api/checkout', async (req, res) => {
         console.log(`[CHECKOUT] Sede: ${targetSedeId}, Amount: $${amount}, WithSurcharge: ${!!withSurcharge}, Total charged: $${totalCharged}`);
 
         const preference = new Preference(mpClient);
-        const webhookUrl = (process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com') + `/api/webhooks?sede_id=${targetSedeId || ''}`;
+        const webhookUrl = (process.env.BACKEND_URL || `http://localhost:${PORT}`) + `/api/webhooks?sede_id=${targetSedeId || ''}`;
         const result = await preference.create({
             body: {
                 items: items,
@@ -964,12 +1173,12 @@ app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
         const mpClient = await getMPClientForSede(student.sede_id);
         if (!mpClient) return res.status(400).json({ error: 'Mercado Pago no está configurado para la sede de este alumno.' });
         const preference = new Preference(mpClient);
-        const webhookUrl = (process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com') + `/api/webhooks?sede_id=${student.sede_id || ''}`;
+        const webhookUrl = (process.env.BACKEND_URL || `http://localhost:${PORT}`) + `/api/webhooks?sede_id=${student.sede_id || ''}`;
         const result = await preference.create({
             body: {
                 items: [
                     {
-                        title: `Mensualidad Dojo Ranas - ${student.name}`,
+                        title: `Mensualidad ${BRAND.academy} - ${student.name}`,
                         quantity: 1,
                         currency_id: 'CLP',
                         unit_price: Number(student.monthlyfee)
@@ -994,12 +1203,12 @@ app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
         });
 
         await transporter.sendMail({
-            from: `"Dojo Ranas" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+            from: `"${BRAND.academy}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
             to: student.email,
-            subject: 'Aviso de Cobro Mensual - Dojo Ranas 🐸',
+            subject: `Aviso de Cobro Mensual - ${BRAND.academy}`,
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-                    <h2 style="color: #05a86a;">¡Hola ${student.name}!</h2>
+                    <h2 style="color: ${BRAND.color};">¡Hola ${student.name}!</h2>
                     <p>Esperamos que estés teniendo un gran mes de entrenamiento. Te recordamos que tu pago mensual se encuentra pendiente.</p>
                     <div style="background: #f4f4f4; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
                         <p style="margin: 0; font-size: 1.2rem;"><strong>Mensualidad:</strong> $${student.monthlyfee.toLocaleString('es-CL')}</p>
@@ -1010,7 +1219,7 @@ app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
                     <p style="font-size: 0.9rem; color: #666;">También puedes revisar tu estado de cuenta iniciando sesión en nuestro portal de alumnos.</p>
                     <p>¡Nos vemos en el tatami!</p>
                     <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                    <p style="font-size: 0.8rem; color: #999;">Dojo Ranas Team - Orompello 1421</p>
+                    <p style="font-size: 0.8rem; color: #999;">${BRAND.company}</p>
                 </div>
             `,
         });
@@ -1093,20 +1302,20 @@ app.post('/api/admin/send-credentials', async (req, res) => {
 
             try {
                 // Template default si no viene customMessage
-                let finalSubject = customSubject || 'Tus credenciales de acceso - Dojo Ranas 🐸';
+                let finalSubject = customSubject || `Tus credenciales de acceso - ${BRAND.academy}`;
                 let finalHtml = customMessage || `
                     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                         <div style="text-align: center; margin-bottom: 2rem;">
-                            <h2 style="color: #05a86a; margin-top: 1rem; font-size: 1.8rem;">¡Hola {{name}}!</h2>
-                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te enviamos tus credenciales para acceder al portal oficial de <strong>Dojo Ranas</strong>.</p>
+                            <h2 style="color: ${BRAND.color}; margin-top: 1rem; font-size: 1.8rem;">¡Hola {{name}}!</h2>
+                            <p style="font-size: 1.1rem; color: #64748b; margin-top: 0.5rem;">Te enviamos tus credenciales para acceder al portal oficial de <strong>${BRAND.academy}</strong>.</p>
                         </div>
                         
                         <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
                             <p style="margin: 0 0 1rem 0; font-weight: 800; font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em;">DATOS DE ACCESO:</p>
                             <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Email:</strong> {{email}}</p>
-                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: #05a86a; color: #fff; padding: 2px 8px; border-radius: 6px;">{{password}}</span></p>
+                            <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>Contraseña:</strong> <span style="background: ${BRAND.color}; color: #fff; padding: 2px 8px; border-radius: 6px;">{{password}}</span></p>
                             
-                            <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                            <a href="${BRAND.url}" style="display: block; background: ${BRAND.color}; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 2rem; box-shadow: 0 10px 20px rgba(22,196,122,0.2);">ENTRAR AL PORTAL 🥋</a>
                         </div>
 
                         <div style="margin-top: 2rem;">
@@ -1121,7 +1330,7 @@ app.post('/api/admin/send-credentials', async (req, res) => {
 
                         <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-top: 3rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
                             Te aconsejamos cambiar tu contraseña en la sección <strong>Mi Perfil</strong> al ingresar.<br>
-                            <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                            <strong>${BRAND.academy}</strong> - 
                         </p>
                     </div>
                 `;
@@ -1133,7 +1342,7 @@ app.post('/api/admin/send-credentials', async (req, res) => {
                     .replace(/{{password}}/g, student.password);
 
                 await transporter.sendMail({
-                    from: `"Dojo Ranas" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+                    from: `"${BRAND.academy}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
                     to: student.email,
                     subject: finalSubject,
                     html: finalHtml,
@@ -1200,7 +1409,7 @@ app.post('/api/recover-password', async (req, res) => {
             <tr>
                 <td style="padding: 0.8rem 1rem; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${s.name}</td>
                 <td style="padding: 0.8rem 1rem; border-bottom: 1px solid #e2e8f0;">
-                    <span style="background: #05a86a; color: #fff; padding: 3px 10px; border-radius: 6px; font-weight: 800; letter-spacing: 0.05em;">${s.password}</span>
+                    <span style="background: ${BRAND.color}; color: #fff; padding: 3px 10px; border-radius: 6px; font-weight: 800; letter-spacing: 0.05em;">${s.password}</span>
                 </td>
             </tr>
         `).join('');
@@ -1210,11 +1419,11 @@ app.post('/api/recover-password', async (req, res) => {
         const html = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; background: #ffffff; padding: 2.5rem; border-radius: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                 <div style="text-align: center; margin-bottom: 2rem;">
-                    <div style="width: 60px; height: 60px; background: #05a86a; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                    <div style="width: 60px; height: 60px; background: ${BRAND.color}; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
                         <span style="font-size: 1.8rem;">🔑</span>
                     </div>
-                    <h2 style="color: #05a86a; margin-top: 0.5rem; font-size: 1.6rem;">Recuperación de Contraseña</h2>
-                    <p style="font-size: 1rem; color: #64748b; margin-top: 0.5rem;">Hola <strong>${firstName}</strong>, aquí tienes tus datos de acceso al portal de <strong>Dojo Ranas</strong>.</p>
+                    <h2 style="color: ${BRAND.color}; margin-top: 0.5rem; font-size: 1.6rem;">Recuperación de Contraseña</h2>
+                    <p style="font-size: 1rem; color: #64748b; margin-top: 0.5rem;">Hola <strong>${firstName}</strong>, aquí tienes tus datos de acceso al portal de <strong>${BRAND.academy}</strong>.</p>
                 </div>
                 
                 <div style="background: #f8fafc; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0;">
@@ -1222,8 +1431,8 @@ app.post('/api/recover-password', async (req, res) => {
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
                         <thead>
                             <tr style="background: rgba(5,168,106,0.08);">
-                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid #05a86a;">Nombre</th>
-                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid #05a86a;">Contraseña</th>
+                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid ${BRAND.color};">Nombre</th>
+                                <th style="padding: 0.8rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid ${BRAND.color};">Contraseña</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1232,7 +1441,7 @@ app.post('/api/recover-password', async (req, res) => {
                     </table>
                     <p style="margin: 1rem 0 0 0; font-size: 0.85rem; color: #64748b;"><strong>Email de acceso:</strong> ${lowerEmail}</p>
                     
-                    <a href="https://ranasjiujitsu.cl" style="display: block; background: #05a86a; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 1.5rem; box-shadow: 0 10px 20px rgba(5,168,106,0.2);">ENTRAR AL PORTAL 🥋</a>
+                    <a href="${BRAND.url}" style="display: block; background: ${BRAND.color}; color: #fff; padding: 1.2rem; text-decoration: none; border-radius: 1rem; font-weight: 800; text-align: center; margin-top: 1.5rem; box-shadow: 0 10px 20px rgba(22,196,122,0.2);">ENTRAR AL PORTAL 🥋</a>
                 </div>
 
                 <div style="background: #fffbeb; border: 1px solid #fbbf24; padding: 1.2rem; border-radius: 1rem; margin-bottom: 1.5rem;">
@@ -1243,15 +1452,15 @@ app.post('/api/recover-password', async (req, res) => {
 
                 <p style="font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 2rem; border-top: 1px solid #f1f5f9; padding-top: 1.5rem;">
                     Si no solicitaste este correo, puedes ignorarlo.<br>
-                    <strong>Dojo Ranas Concepción</strong> - Orompello 1421
+                    <strong>${BRAND.academy}</strong> - 
                 </p>
             </div>
         `;
 
         await transporter.sendMail({
-            from: `"Dojo Ranas 🐸" <${process.env.SMTP_FROM || smtpUser}>`,
+            from: `"${BRAND.academy}" <${process.env.SMTP_FROM || smtpUser}>`,
             to: lowerEmail,
-            subject: 'Recuperación de contraseña - Dojo Ranas 🐸',
+            subject: `Recuperación de contraseña - ${BRAND.academy}`,
             html
         });
 
@@ -1392,7 +1601,7 @@ app.post('/api/admin/check-birthdays', async (req, res) => {
         if (birthdayStudents.length > 0) {
             const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
             const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
-            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su Dojo Ranas! 🥋🐸`;
+            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su ${BRAND.academy}! `;
             
             await supabase.from('news').upsert({
                 id: noticeId,
@@ -1658,10 +1867,10 @@ async function syncTransferPayments() {
         // Obtener todas las sedes
         const { data: sedes, error: sedesErr } = await supabase.from('sedes').select('id, name');
         if (sedesErr) {
-            console.error('[SYNC] No se pudieron obtener las sedes. Fallback a Concepción (ID: 1).');
+            console.error('[SYNC] No se pudieron obtener las sedes. Fallback a sede 1.');
         }
 
-        const activeSedes = sedes && sedes.length > 0 ? sedes : [{ id: 1, name: 'Concepción' }];
+        const activeSedes = sedes && sedes.length > 0 ? sedes : [{ id: 1, name: 'Sede Centro' }];
         let totalSynced = 0;
         let allDetails = [];
 
@@ -1854,7 +2063,7 @@ cron.schedule('0 9 * * *', async () => {
             if (birthdayStudents.length > 0) {
                 const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
                 const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
-                const message = `Hoy saludamos especialmente a **${names}** en su día. ¡Que tengas un excelente cumpleaños y nos vemos pronto en el Dojo! 🥋🐸`;
+                const message = `Hoy saludamos especialmente a **${names}** en su día. ¡Que tengas un excelente cumpleaños y nos vemos pronto en el Dojo! `;
                 
                 await supabase.from('news').upsert({
                     id: noticeId,
@@ -1881,8 +2090,8 @@ cron.schedule('0 9 * * *', async () => {
 
 // --- FEES & AUTOMATION PERSISTENCE (Using reserved news IDs) ---
 const DEFAULT_FEES = {
-    adults: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 },
-    kids: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 }
+    adults: { '1': 20000, '1x': 20000, '2': 25000, '3': 35000, '4': 40000, 'Ilimitado': 45000 },
+    kids: { '1': 18000, '1x': 18000, '2': 25000, '3': 35000, '4': 40000, 'Ilimitado': 45000 }
 };
 
 app.get('/api/fees', async (req, res) => {
@@ -2064,6 +2273,319 @@ app.get('/api/sedes', async (req, res) => {
     }
 });
 
+function mapClassSlot(row) {
+    const cap = row.capacity;
+    return {
+        id: String(row.id),
+        name: row.name,
+        day: row.day,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        teacher: row.teacher || '',
+        sedeId: row.sede_id || 1,
+        audience: row.audience || 'ADULTS',
+        sortOrder: row.sort_order || 0,
+        capacity: (cap === undefined || cap === null || cap === '') ? null : Number(cap),
+    };
+}
+
+function timeToMin(t) {
+    const [h, m] = String(t || '00:00').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+}
+
+function scheduleHasOverlap(slots) {
+    for (let i = 0; i < slots.length; i++) {
+        const a = slots[i];
+        if (timeToMin(a.endTime) <= timeToMin(a.startTime)) return true;
+        for (let j = i + 1; j < slots.length; j++) {
+            const b = slots[j];
+            if (a.day !== b.day) continue;
+            if (!(timeToMin(a.startTime) < timeToMin(b.endTime) && timeToMin(b.startTime) < timeToMin(a.endTime))) continue;
+            const sameSede = Number(a.sedeId) === Number(b.sedeId);
+            const sameTeacher = (a.teacher || '').trim() && (a.teacher || '').trim().toLowerCase() === (b.teacher || '').trim().toLowerCase();
+            if (sameSede || sameTeacher) return true;
+        }
+    }
+    return false;
+}
+
+app.get('/api/schedule', async (req, res) => {
+    try {
+        let query = supabase.from('class_slots').select('*').order('sort_order', { ascending: true });
+        if (req.query.sedeId) query = query.eq('sede_id', Number(req.query.sedeId));
+        const { data, error } = await query;
+        if (error) throw error;
+        const mapped = (data || []).map(mapClassSlot);
+        res.json(mapped);
+    } catch (error) {
+        console.error('GET schedule error:', error.message);
+        res.json([]);
+    }
+});
+
+app.put('/api/schedule', async (req, res) => {
+    try {
+        const slots = Array.isArray(req.body.slots) ? req.body.slots : [];
+        if (scheduleHasOverlap(slots)) {
+            return res.status(400).json({ error: 'Hay clases que se superponen en la misma sede o con el mismo profesor.' });
+        }
+        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
+        if (DEMO_LOCK) {
+            let existingQ = supabase.from('class_slots').select('id');
+            if (sedeId) existingQ = existingQ.eq('sede_id', sedeId);
+            const { data: existing } = await existingQ;
+            const incoming = new Set((slots || []).map((s) => String(s.id || '')).filter((id) => id && !id.startsWith('tmp-')));
+            const missing = (existing || []).filter((row) => !incoming.has(String(row.id)));
+            if (missing.length) {
+                return demoForbidden(res, 'classes');
+            }
+        }
+        let del = supabase.from('class_slots').delete();
+        del = sedeId ? del.eq('sede_id', sedeId) : del.gte('sort_order', 0);
+        const { error: delErr } = await del;
+        if (delErr) throw delErr;
+
+        const rows = slots.map((s, i) => {
+            const rawId = String(s.id || '');
+            const id = !rawId || rawId.startsWith('tmp-') ? `s${Date.now()}${i}` : rawId;
+            return {
+                id,
+                name: s.name || 'Clase',
+                day: s.day || 'Lunes',
+                start_time: s.startTime || '19:00',
+                end_time: s.endTime || '20:30',
+                teacher: s.teacher || '',
+                sede_id: s.sedeId ? Number(s.sedeId) : (sedeId || 1),
+                audience: s.audience || 'ADULTS',
+                sort_order: i + 1,
+                capacity: s.capacity === undefined || s.capacity === null || s.capacity === '' ? null : Number(s.capacity),
+            };
+        });
+        if (rows.length) {
+            let { error: insErr } = await supabase.from('class_slots').insert(rows);
+            if (insErr && (insErr.message || '').includes('capacity')) {
+                const withoutCap = rows.map(({ capacity, ...rest }) => rest);
+                const retry = await supabase.from('class_slots').insert(withoutCap);
+                insErr = retry.error;
+            }
+            if (insErr) throw insErr;
+        }
+        const { data } = await supabase.from('class_slots').select('*').order('sort_order', { ascending: true });
+        res.json((data || []).map(mapClassSlot));
+    } catch (error) {
+        console.error('PUT schedule error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+function chileNow() {
+    return DateTime.now().setZone('America/Santiago');
+}
+
+function chileDateStr() {
+    return chileNow().toFormat('yyyy-MM-dd');
+}
+
+function chileWeekdayEs() {
+    const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    return days[chileNow().weekday - 1];
+}
+
+function pickActiveSlot(slots, sedeId) {
+    const scoped = sedeId ? slots.filter((s) => Number(s.sedeId) === Number(sedeId)) : slots;
+    const pool = scoped.length ? scoped : slots;
+    const today = chileWeekdayEs();
+    const todays = pool.filter((s) => s.day === today).sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
+    const minutes = chileNow().hour * 60 + chileNow().minute;
+    const live = todays.find((s) => minutes >= timeToMin(s.startTime) - 15 && minutes <= timeToMin(s.endTime) + 15);
+    if (live) return live;
+    const upcoming = todays.find((s) => timeToMin(s.startTime) - 15 > minutes);
+    if (upcoming) return upcoming;
+    return todays[0] || pool[0] || null;
+}
+
+const ACADEMY_QR = 'DP-CHECKIN';
+
+function isAcademyQr(raw) {
+    const t = String(raw || '').trim().toUpperCase();
+    return t === ACADEMY_QR || t.includes('DP-CHECKIN');
+}
+
+function parseStudentQr(raw) {
+    const t = String(raw || '').trim();
+    if (!t) return null;
+    const m = t.match(/^DP-STU-(.+)$/i);
+    return m ? m[1].trim() : t;
+}
+
+function withinClassWindow(start, end, pad = 15) {
+    const now = chileNow();
+    const minutes = now.hour * 60 + now.minute;
+    return minutes >= timeToMin(start) - pad && minutes <= timeToMin(end) + pad;
+}
+
+function mapAttendance(row) {
+    return {
+        id: String(row.id),
+        studentId: String(row.student_id),
+        slotId: row.slot_id ? String(row.slot_id) : '',
+        date: row.class_date,
+        checkedAt: row.checked_at,
+        withinWindow: row.within_window !== false,
+    };
+}
+
+function planWeeklyMax(plan) {
+    const p = String(plan || '').toLowerCase();
+    if (p.includes('ilimitado') || p.includes('libre')) return 99;
+    const m = String(plan || '').match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) : 2;
+}
+
+function chileWeekStartDate() {
+    const now = chileNow();
+    return now.minus({ days: now.weekday - 1 }).toFormat('yyyy-MM-dd');
+}
+
+app.get('/api/attendance/me', async (req, res) => {
+    try {
+        const studentId = String(req.query.studentId || '').trim();
+        const date = String(req.query.date || chileDateStr());
+        if (!studentId) return res.status(400).json({ error: 'studentId requerido' });
+        const { data, error } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('class_date', date)
+            .order('checked_at', { ascending: false })
+            .limit(1);
+        if (error) throw error;
+        const row = (data || [])[0] || null;
+        res.json({ record: row ? mapAttendance(row) : null });
+    } catch (error) {
+        console.error('GET attendance/me error:', error.message);
+        res.status(500).json({ error: error.message, tableMissing: /attendance|relation/i.test(error.message || '') });
+    }
+});
+
+app.get('/api/attendance', async (req, res) => {
+    try {
+        const date = String(req.query.date || chileDateStr());
+        const slotId = req.query.slotId ? String(req.query.slotId) : null;
+        let query = supabase.from('attendance').select('*').eq('class_date', date);
+        if (slotId) query = query.eq('slot_id', slotId);
+        const { data, error } = await query.order('checked_at', { ascending: true });
+        if (error) throw error;
+        const mapped = (data || []).map(mapAttendance);
+        res.json(mapped);
+    } catch (error) {
+        console.error('GET attendance error:', error.message);
+        res.status(500).json({ error: error.message, tableMissing: /attendance|relation/i.test(error.message || '') });
+    }
+});
+
+app.post('/api/attendance', async (req, res) => {
+    try {
+        const body = req.body || {};
+        const academyScan = isAcademyQr(body.academyQr || '');
+        const studentId = academyScan
+            ? String(body.studentId || '').trim()
+            : parseStudentQr(body.qr || body.studentId || '');
+        let slotId = String(body.slotId || '').trim();
+        const date = academyScan ? chileDateStr() : String(body.date || chileDateStr());
+        const present = body.present !== false;
+        if (!studentId) return res.status(400).json({ error: 'QR o alumno requerido' });
+
+        const { data: student, error: stErr } = await supabase.from('students').select('id, name, plan, ispaid, classesattended, sede_id').eq('id', studentId).maybeSingle();
+        if (stErr) throw stErr;
+        if (!student) return res.status(404).json({ error: 'Alumno no encontrado' });
+
+        if (academyScan && !slotId) {
+            const { data: slotRows } = await supabase.from('class_slots').select('*').order('sort_order', { ascending: true });
+            const slots = (slotRows || []).map(mapClassSlot);
+            const picked = pickActiveSlot(slots, student.sede_id || null);
+            slotId = picked?.id ? String(picked.id) : '';
+        }
+        if (!slotId) return res.status(400).json({ error: 'Clase requerida' });
+
+        if (!present) {
+            const { error: delErr } = await supabase
+                .from('attendance')
+                .delete()
+                .eq('student_id', studentId)
+                .eq('slot_id', slotId)
+                .eq('class_date', date);
+            if (delErr) throw delErr;
+            return res.json({ ok: true, present: false, studentId, slotId, date });
+        }
+
+        const { data: slotRow } = await supabase.from('class_slots').select('*').eq('id', slotId).maybeSingle();
+        const slot = slotRow ? mapClassSlot(slotRow) : null;
+        const inWindow = slot ? withinClassWindow(slot.startTime, slot.endTime) : true;
+
+        const { data: existing } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('slot_id', slotId)
+            .eq('class_date', date)
+            .maybeSingle();
+
+        if (existing) {
+            return res.json({ ok: true, already: true, record: mapAttendance(existing), student: { id: student.id, name: student.name, plan: student.plan, isPaid: student.ispaid }, slot, withinWindow: existing.within_window !== false });
+        }
+
+        const openMat = /open\s*mat/i.test(slot?.name || '');
+        const planMax = planWeeklyMax(student.plan);
+        const weekStart = chileWeekStartDate();
+        const { data: weekRows } = await supabase
+            .from('attendance')
+            .select('id, slot_id')
+            .eq('student_id', studentId)
+            .gte('class_date', weekStart);
+        const { data: allSlots } = await supabase.from('class_slots').select('id, name');
+        const openIds = new Set((allSlots || []).filter((s) => /open\s*mat/i.test(s.name || '')).map((s) => String(s.id)));
+        const weekUsed = (weekRows || []).filter((r) => !openIds.has(String(r.slot_id))).length;
+        if (!openMat && planMax < 99 && weekUsed >= planMax) {
+            return res.status(409).json({
+                error: `Plan ${planMax} clases: ya usó ${weekUsed} esta semana.`,
+                weekUsed,
+                planMax,
+                openMat: false,
+            });
+        }
+
+        const row = {
+            id: `a${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+            student_id: studentId,
+            slot_id: slotId,
+            class_date: date,
+            checked_at: new Date().toISOString(),
+            within_window: inWindow,
+        };
+        const { data: inserted, error: insErr } = await supabase.from('attendance').insert(row).select('*').maybeSingle();
+        if (insErr) throw insErr;
+
+        await supabase.from('students').update({ classesattended: Number(student.classesattended || 0) + 1 }).eq('id', studentId);
+
+        res.json({
+            ok: true,
+            already: false,
+            record: mapAttendance(inserted || row),
+            student: { id: student.id, name: student.name, plan: student.plan, isPaid: student.ispaid },
+            slot,
+            withinWindow: inWindow,
+            weekUsed: weekUsed + (openMat ? 0 : 1),
+            planMax,
+            openMat,
+        });
+    } catch (error) {
+        console.error('POST attendance error:', error.message);
+        res.status(500).json({ error: error.message, tableMissing: /attendance|relation/i.test(error.message || '') });
+    }
+});
+
 // Endpoint seguro de Autenticación
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -2186,12 +2708,12 @@ app.post('/api/whatsapp/send', async (req, res) => {
         }
 
         const formattedPhone = formatWhatsAppPhone(phone);
-        const finalMessage = (message || 'Hola {nombre}, te saludamos desde Dojo Ranas Jiu Jitsu.')
+        const finalMessage = (message || `Hola {nombre}, te saludamos desde ${BRAND.academy}.`)
             .replace(/{nombre}/g, studentName || 'Alumno')
             .replace(/{monto}/g, amount ? `$${Number(amount).toLocaleString('es-CL')}` : '$40.000')
             .replace(/{categoria}/g, category || 'Oficial IBJJF')
-            .replace(/{dojo}/g, 'Ranas Jiu Jitsu')
-            .replace(/{link_pago}/g, 'https://ranasjiujitsu.cl');
+            .replace(/{dojo}/g, BRAND.academy)
+            .replace(/{link_pago}/g, BRAND.url);
 
         const token = process.env.WHATSAPP_API_TOKEN;
         const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -2250,10 +2772,10 @@ app.post('/api/whatsapp/broadcast', async (req, res) => {
             const formattedPhone = formatWhatsAppPhone(st.phone);
             if (!formattedPhone) continue;
 
-            const finalMessage = (template || 'Hola {nombre}, recordatorio de mensualidad Dojo Ranas.')
+            const finalMessage = (template || `Hola {nombre}, recordatorio de mensualidad ${BRAND.academy}.`)
                 .replace(/{nombre}/g, st.name || 'Alumno')
                 .replace(/{monto}/g, st.monthlyFee ? `$${Number(st.monthlyFee).toLocaleString('es-CL')}` : '$40.000')
-                .replace(/{link_pago}/g, 'https://ranasjiujitsu.cl');
+                .replace(/{link_pago}/g, BRAND.url);
 
             results.push({
                 studentId: st.id,
@@ -2273,8 +2795,271 @@ app.post('/api/whatsapp/broadcast', async (req, res) => {
     }
 });
 
+function slugifyEvent(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60) || `evento-${Date.now()}`;
+}
+
+function ageFromBirth(iso) {
+    if (!iso) return null;
+    const [y, m, d] = String(iso).split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const now = new Date();
+    let age = now.getFullYear() - y;
+    const md = now.getMonth() + 1 - m;
+    if (md < 0 || (md === 0 && now.getDate() < d)) age -= 1;
+    return age;
+}
+
+function mapEvent(row, registered = 0) {
+    return {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        description: row.description || '',
+        photo: row.photo || '',
+        rulesUrl: row.rules_url || '',
+        rulesName: row.rules_name || '',
+        date: row.event_date || '',
+        startTime: row.start_time || '',
+        endTime: row.end_time || '',
+        address: row.address || '',
+        capacity: row.capacity,
+        paid: row.paid !== false,
+        price: Number(row.price) || 0,
+        status: row.status || 'draft',
+        categories: Array.isArray(row.categories) ? row.categories : [],
+        createdAt: row.created_at,
+        registered,
+    };
+}
+
+function mapRegistration(row) {
+    const ibjjf = calculateIBJJFCategory(row.birth_date, row.weight, row.gender, row.belt || 'WHITE');
+    const categoryName = ibjjf.ready ? ibjjf.fullCategoryString : (row.category_name || '');
+    return {
+        id: row.id,
+        eventId: row.event_id,
+        kind: row.kind === 'student' ? 'student' : 'guest',
+        studentId: row.student_id || null,
+        name: row.name,
+        email: row.email || '',
+        phone: row.phone || '',
+        documentId: row.document_id || '',
+        birthDate: row.birth_date || '',
+        age: ibjjf.age || row.age,
+        weight: row.weight == null ? null : Number(row.weight),
+        gender: row.gender || '',
+        belt: row.belt || '',
+        academy: row.academy || '',
+        categoryId: categoryName,
+        categoryName,
+        amount: Number(row.amount) || 0,
+        status: row.status === 'paid' ? 'paid' : 'pending',
+        method: row.method || '',
+        createdAt: row.created_at,
+    };
+}
+
+function eventPayload(body, existing) {
+    const title = (body.title || existing?.title || '').trim();
+    const slug = slugifyEvent(body.slug || existing?.slug || title);
+    return {
+        title: title || 'Evento',
+        slug,
+        description: body.description ?? existing?.description ?? '',
+        photo: body.photo ?? existing?.photo ?? '',
+        rules_url: body.rulesUrl ?? body.rules_url ?? existing?.rules_url ?? '',
+        rules_name: body.rulesName ?? body.rules_name ?? existing?.rules_name ?? '',
+        event_date: body.date ?? body.event_date ?? existing?.event_date ?? null,
+        start_time: body.startTime ?? body.start_time ?? existing?.start_time ?? '',
+        end_time: body.endTime ?? body.end_time ?? existing?.end_time ?? '',
+        address: body.address ?? existing?.address ?? '',
+        capacity: body.capacity === '' || body.capacity === undefined ? (existing?.capacity ?? null) : (body.capacity == null ? null : Number(body.capacity)),
+        paid: body.paid === undefined ? (existing ? existing.paid !== false : true) : !!body.paid,
+        price: body.price === undefined ? Number(existing?.price || 0) : Number(body.price) || 0,
+        status: body.status === 'published' || body.status === 'draft' ? body.status : (existing?.status || 'draft'),
+        categories: Array.isArray(body.categories) ? body.categories : (existing?.categories || []),
+    };
+}
+
+app.get('/api/events/public', async (_req, res) => {
+    try {
+        const { data, error } = await supabase.from('events').select('*').eq('status', 'published').order('event_date', { ascending: true });
+        if (error) throw error;
+        const ids = (data || []).map((e) => e.id);
+        let counts = {};
+        if (ids.length) {
+            const { data: regs } = await supabase.from('event_registrations').select('event_id').in('event_id', ids);
+            (regs || []).forEach((r) => { counts[r.event_id] = (counts[r.event_id] || 0) + 1; });
+        }
+        res.json((data || []).map((row) => mapEvent(row, counts[row.id] || 0)));
+    } catch (error) {
+        res.status(500).json({ error: error.message, tableMissing: /events|relation/i.test(error.message || '') });
+    }
+});
+
+app.get('/api/events/public/:slug', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('events').select('*').eq('slug', req.params.slug).maybeSingle();
+        if (error) throw error;
+        if (!data || data.status !== 'published') return res.status(404).json({ error: 'Evento no publicado' });
+        const { count } = await supabase.from('event_registrations').select('id', { count: 'exact', head: true }).eq('event_id', data.id);
+        res.json(mapEvent(data, count || 0));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/events', async (_req, res) => {
+    try {
+        const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        const ids = (data || []).map((e) => e.id);
+        let counts = {};
+        if (ids.length) {
+            const { data: regs } = await supabase.from('event_registrations').select('event_id').in('event_id', ids);
+            (regs || []).forEach((r) => { counts[r.event_id] = (counts[r.event_id] || 0) + 1; });
+        }
+        res.json((data || []).map((row) => mapEvent(row, counts[row.id] || 0)));
+    } catch (error) {
+        res.status(500).json({ error: error.message, tableMissing: /events|relation/i.test(error.message || '') });
+    }
+});
+
+app.get('/api/events/:id', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('events').select('*').or(`id.eq.${req.params.id},slug.eq.${req.params.id}`).maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: 'Evento no encontrado' });
+        const { data: regs, error: regErr } = await supabase.from('event_registrations').select('*').eq('event_id', data.id).order('created_at', { ascending: false });
+        if (regErr) throw regErr;
+        res.json({ event: mapEvent(data, (regs || []).length), registrations: (regs || []).map(mapRegistration) });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/events', async (req, res) => {
+    try {
+        const row = eventPayload(req.body, null);
+        const id = req.body.id || `ev${Date.now()}`;
+        const { data, error } = await supabase.from('events').insert({ id, ...row }).select('*').single();
+        if (error) throw error;
+        res.status(201).json(mapEvent(data, 0));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/events/:id', async (req, res) => {
+    try {
+        const { data: current, error: curErr } = await supabase.from('events').select('*').eq('id', req.params.id).maybeSingle();
+        if (curErr) throw curErr;
+        if (!current) return res.status(404).json({ error: 'Evento no encontrado' });
+        const row = eventPayload(req.body, current);
+        const { data, error } = await supabase.from('events').update(row).eq('id', req.params.id).select('*').single();
+        if (error) throw error;
+        res.json(mapEvent(data, 0));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/events/:id', async (req, res) => {
+    if (DEMO_LOCK && req.params.id === 'ev1') return demoForbidden(res, 'events');
+    try {
+        const { error } = await supabase.from('events').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/events/:id/register', async (req, res) => {
+    try {
+        const { data: event, error: evErr } = await supabase.from('events').select('*').or(`id.eq.${req.params.id},slug.eq.${req.params.id}`).maybeSingle();
+        if (evErr) throw evErr;
+        if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
+        if (event.status !== 'published') return res.status(400).json({ error: 'El evento aún no está publicado.' });
+
+        const { count } = await supabase.from('event_registrations').select('id', { count: 'exact', head: true }).eq('event_id', event.id);
+        if (event.capacity && (count || 0) >= event.capacity) {
+            return res.status(400).json({ error: 'Cupos agotados.' });
+        }
+
+        const kind = req.body.kind === 'student' ? 'student' : 'guest';
+        const studentId = kind === 'student' ? String(req.body.studentId || '') : '';
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const name = String(req.body.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+        if (studentId) {
+            const { data: dup } = await supabase.from('event_registrations').select('id').eq('event_id', event.id).eq('student_id', studentId).maybeSingle();
+            if (dup) return res.status(400).json({ error: 'Este alumno ya está inscrito.' });
+        } else if (email) {
+            const { data: dup } = await supabase.from('event_registrations').select('id').eq('event_id', event.id).eq('email', email).maybeSingle();
+            if (dup) return res.status(400).json({ error: 'Este correo ya está inscrito.' });
+        }
+
+        const birthDate = req.body.birthDate || '';
+        const ibjjf = calculateIBJJFCategory(birthDate, req.body.weight, req.body.gender, req.body.belt || 'WHITE');
+        if (!ibjjf.ready) {
+            return res.status(400).json({ error: 'Para calcular la categoría hacen falta fecha de nacimiento, peso, género y cinturón.' });
+        }
+        const amount = Number(event.price || 0);
+        const row = {
+            id: `er${Date.now()}`,
+            event_id: event.id,
+            kind,
+            student_id: studentId || null,
+            name,
+            email,
+            phone: String(req.body.phone || '').trim(),
+            document_id: String(req.body.documentId || '').trim(),
+            birth_date: birthDate,
+            age: ibjjf.age,
+            weight: req.body.weight ? Number(req.body.weight) : null,
+            gender: req.body.gender || '',
+            belt: req.body.belt || '',
+            academy: kind === 'guest' ? String(req.body.academy || '').trim() : 'Academia Demo',
+            category_id: ibjjf.fullCategoryString,
+            category_name: ibjjf.fullCategoryString,
+            amount,
+            status: event.paid === false ? 'paid' : 'pending',
+            method: req.body.method || (event.paid === false ? 'Gratis' : 'Transferencia'),
+        };
+        const { data, error } = await supabase.from('event_registrations').insert(row).select('*').single();
+        if (error) throw error;
+        res.status(201).json(mapRegistration(data));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/events/:id/registrations/:rid', async (req, res) => {
+    try {
+        const patch = {};
+        if (req.body.status) patch.status = req.body.status === 'paid' ? 'paid' : 'pending';
+        if (req.body.method) patch.method = req.body.method;
+        const { data, error } = await supabase.from('event_registrations').update(patch).eq('id', req.params.rid).eq('event_id', req.params.id).select('*').single();
+        if (error) throw error;
+        res.json(mapRegistration(data));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.listen(PORT, () => {
+    const projectRef = supabaseUrl.replace('https://', '').split('.')[0] || '(sin proyecto)';
     console.log(`Server running on port ${PORT}`);
+    console.log('- Supabase project:', projectRef);
     console.log("- MP Token exists:", !!process.env.VITE_MP_ACCESS_TOKEN);
 
     // Run initial sync on startup to catch any missed payments while server was sleeping
@@ -2288,8 +3073,8 @@ app.listen(PORT, () => {
         }
     }, 5000);
 
-    // Self-ping every 14 minutes to prevent Render from sleeping
-    const BACKEND_URL = process.env.BACKEND_URL || 'https://dojo-demo-server.onrender.com';
+    // Self-ping every 14 minutes (no apuntar al backend de Ranas)
+    const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
     setInterval(() => {
         fetch(`${BACKEND_URL}/health`)
             .then(r => r.json())

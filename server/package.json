@@ -1,7 +1,7 @@
 {
-    "name": "ranas-jiujitsu-server",
+    "name": "dp-sistemas-server",
     "version": "1.0.0",
-    "description": "Backend for Ranas Jiu Jitsu",
+    "description": "Backend demo DP Sistemas y Automatizaciones",
     "main": "index.js",
     "type": "module",
     "scripts": {

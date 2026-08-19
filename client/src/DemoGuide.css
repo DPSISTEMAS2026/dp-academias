@@ -1,0 +1,300 @@
+.dg {
+  font-family: Outfit, system-ui, sans-serif;
+}
+
+body.ig-poster-open .dg,
+body.modal-open .dg {
+  display: none !important;
+}
+
+.dg-fab-wrap {
+  position: fixed;
+  right: 0.6rem;
+  bottom: 0.4rem;
+  z-index: 12050;
+  transform-origin: 100% 100%;
+  transition:
+    opacity 0.32s ease,
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.28s;
+}
+.dg.is-student .dg-fab-wrap { bottom: 0.15rem; right: 0.15rem; }
+.dg.is-open .dg-fab-wrap,
+.dg.is-hidden .dg-fab-wrap,
+.dg.is-hidden .dg-panel {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(8px, 10px, 0) scale(0.92);
+}
+
+.dg-fab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.dg-dismiss {
+  position: absolute;
+  right: 0;
+  bottom: 102px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(22, 22, 22, 0.1);
+  background: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
+}
+
+.dg-hint {
+  background: #fff;
+  color: #161616;
+  border: 1px solid rgba(22, 22, 22, 0.08);
+  border-radius: 16px 16px 4px 16px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  max-width: 168px;
+  text-align: right;
+  line-height: 1.25;
+  transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dg-fab img {
+  height: 124px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 22px rgba(0, 105, 112, 0.28));
+  pointer-events: none;
+}
+
+.dg-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 12060;
+  width: min(380px, calc(100vw - 1.4rem));
+  height: min(560px, calc(100dvh - 2.2rem));
+  background: #fff;
+  border: 1px solid rgba(22, 22, 22, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #161616;
+  transform-origin: 92% 96%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(10px, 18px, 0) scale(0.94);
+  transition:
+    opacity 0.34s ease,
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.32s;
+}
+.dg.is-open .dg-panel {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 0.34s ease,
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0s;
+}
+.dg.is-student .dg-panel {
+  bottom: 4.35rem;
+  height: min(46dvh, 360px);
+}
+
+.dg-hero {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.7rem 0.75rem 0.6rem 0.55rem;
+  background: linear-gradient(180deg, #f3fbfb 0%, #fff 100%);
+  border-bottom: 1px solid rgba(22, 22, 22, 0.06);
+}
+.dg-hero img {
+  width: 48px;
+  height: 72px;
+  object-fit: contain;
+  object-position: center top;
+}
+.dg-hero strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #006970;
+  line-height: 1.15;
+}
+.dg-hero p {
+  margin: 0.25rem 0 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.35;
+}
+.dg-close {
+  align-self: start;
+  border: 1px solid rgba(22, 22, 22, 0.1);
+  background: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.dg-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  padding: 0.45rem 0.7rem 0.5rem;
+  border-top: 1px solid rgba(22, 22, 22, 0.06);
+  flex-shrink: 0;
+}
+.dg-topics button {
+  border: 1px solid rgba(0, 105, 112, 0.18);
+  background: #f7fbfb;
+  border-radius: 999px;
+  padding: 0.28rem 0.58rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #006970;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+}
+.dg-topics button:hover {
+  background: #e7f4f4;
+  border-color: rgba(0, 105, 112, 0.32);
+}
+
+.dg-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.55rem 0.75rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.dg-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-end;
+}
+.dg-row.me { justify-content: flex-end; }
+.dg-face {
+  width: 36px;
+  height: 48px;
+  object-fit: contain;
+  object-position: center bottom;
+  flex-shrink: 0;
+}
+.dg-msg {
+  max-width: 86%;
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+.dg-msg p { margin: 0; }
+.dg-msg.bot {
+  background: #f3fafb;
+  color: #134e4a;
+  border-radius: 16px 16px 16px 4px;
+}
+.dg-msg.me {
+  background: #006970;
+  color: #fff;
+  border-radius: 16px 16px 4px 16px;
+}
+.dg-go {
+  margin-top: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  background: #006970;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.dg-form {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.65rem 0.75rem 0.8rem;
+  border-top: 1px solid rgba(22, 22, 22, 0.06);
+  background: #fff;
+}
+.dg-form input {
+  flex: 1;
+  border: 1px solid rgba(22, 22, 22, 0.12);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+}
+.dg-form input:focus { border-color: #006970; }
+.dg-form button {
+  border: none;
+  background: #006970;
+  color: #fff;
+  border-radius: 12px;
+  padding: 0 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (max-width: 640px) {
+  .dg-panel {
+    right: 0.6rem;
+    left: 0.6rem;
+    width: auto;
+    bottom: 0.8rem;
+    height: min(72dvh, 560px);
+  }
+  .dg.is-student .dg-panel {
+    bottom: 4.35rem;
+    height: min(46dvh, 360px);
+    left: 0.6rem;
+    right: 0.6rem;
+  }
+  .dg-fab img { height: 108px; }
+  .dg-dismiss { bottom: 86px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dg-panel,
+  .dg-fab,
+  .dg-hint {
+    transition: opacity 0.15s linear, visibility 0s;
+    transform: none;
+  }
+}

@@ -1,31 +1,51 @@
-# 🥋 RANAS JIU JITSU — PLATAFORMA DE GESTIÓN DE ACADEMIA
+# DP Sistemas y Automatizaciones — Demo de plataforma para academias
 
-Sistema integral web y móvil (PWA / Android / iOS) para la gestión técnica, financiera y administrativa de academias de Jiu Jitsu Brasileño.
+Clon de la plataforma de gestión (origen: Dojo Las Ranas) para **mostrar el producto a otros clientes**. No usa la base ni los alumnos de producción.
 
-## 🌟 Características Principales
-- **Gestión de Alumnos y Perfiles**: Ficha técnica, avatares HD con recortador, historial de cinturones.
-- **Categorización Oficial IBJJF (Gi)**: Cálculo automatizado en tiempo real por edad, peso con kimono, género y cinturón.
-- **Cobros Automatizados y Mercado Pago**: Sincronización de transferencias bancarias, cobro de comisión de pasarela y registro manual.
-- **Agenda y Control de Asistencias**: Clases de adultos y niños con límite semanal por plan.
-- **Comunicaciones Multicanal**: Email de bienvenida SMTP + Integración con **WhatsApp API** para alertas automatizadas.
+- Marca: **DP Sistemas y Automatizaciones**
+- Academia de muestra: **Academia Demo** (sedes Centro, Norte y Sur)
+- Landing de producto → login de la demo
 
-## 📖 Documentación Completa
-Consulta el manual de presentación y arquitectura técnica en [DOCUMENTATION.md](file:///e:/DOJO%20DEMO/DOJO-DEMO/DOCUMENTATION.md).
+## Arranque local
 
-## 🚀 Inicio Rápido (Local)
+### 1. Base de datos nueva (obligatorio)
 
-### 1. Servidor Backend:
+**No uses estos proyectos** (ya existen y no son la demo):
+
+| Proyecto | URL | Qué es |
+|---|---|---|
+| DOJO RANAS | `qbimxygcjjmosifsqbko.supabase.co` | Producción, en uso |
+| Copia / backup | `xtcxbxvbtxnmuaylrhmr.supabase.co` | Respaldo, no tocar |
+| Demo DP Sistemas | `prihphytqvpkrrwptali.supabase.co` | Este repo |
+
+1. Crea un **tercer** proyecto en [Supabase](https://supabase.com), por ejemplo `dp-sistemas-demo`.
+2. Copia `.env.example` a `.env` y pega `SUPABASE_URL` y `SUPABASE_ANON_KEY` de ese proyecto nuevo.
+3. En SQL Editor ejecuta, en este orden:
+   - `supabase/schema.sql`
+   - `supabase/seed.sql`
+
+### 2. Servidor y cliente
+
 ```bash
-cd server
-npm install
-node index.js
-```
-
-### 2. Cliente Frontend:
-```bash
-cd client
-npm install
+npm run install-all
 npm run dev
 ```
 
-Acceso local: [http://localhost:5173](http://localhost:5173)
+Cliente: http://localhost:5173  
+API: http://localhost:3002
+
+### Accesos de la demo
+
+| Rol    | Correo                    | Clave    |
+|--------|---------------------------|----------|
+| Admin  | contacto@dpsistemas.cl    | admin123 |
+| Alumno | matias.soto@demo.cl       | demo123  |
+
+## Qué hay en este repo
+
+- Panel admin + app de alumno (el sistema clonado)
+- Landing comercial de DP Sistemas (no el sitio de una academia real)
+- Datos ficticios (Matías, Camila, Diego, Sofía)
+- Paleta y logo DP
+
+Los mockups en `MOCKUPS/` son la referencia visual de módulos (horarios, cupos, material, eventos, QR, apoderados, reportes, sitio público). Se van implementando sobre esta base.

@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
-
-  <!-- Página principal -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ranasjiujitsu.cl/</loc>
-    <lastmod>2026-06-13</lastmod>
+    <loc>https://dpsistemas.cl/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="es-CL" href="https://ranasjiujitsu.cl/" />
   </url>
-
 </urlset>

@@ -12,11 +12,10 @@ import {
   Award,
   Play,
   Info,
-  Instagram,
-  Facebook,
   X, Menu,
   Bell,
   Calendar,
+  Clock,
   DollarSign,
   Volume2,
   VolumeX,
@@ -32,10 +31,9 @@ import {
   Monitor,
   Trash2,
   Phone,
-  Smartphone
+  Ticket
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import QRCode from 'react-qr-code';
 import { Browser } from '@capacitor/browser';
 import { App as CapApp } from '@capacitor/app';
 
@@ -105,7 +103,7 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     return () => clearTimeout(timer);
   }, [onFinish]);
 
-  const cachedSedeName = localStorage.getItem('activeSedeName') || 'Concepción';
+  const cachedSedeName = localStorage.getItem('activeSedeName') || BRAND.academy;
 
   return (
     <motion.div
@@ -124,7 +122,7 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
       <div style={{
         position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)',
         width: '500px', height: '500px',
-        background: 'radial-gradient(circle, rgba(74,222,128,0.12) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(0,105,112,0.22) 0%, transparent 70%)',
         borderRadius: '50%', pointerEvents: 'none'
       }} />
       <div style={{
@@ -149,21 +147,19 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
             position: 'absolute', top: '50%', left: '50%',
             transform: 'translate(-50%, -50%)',
             width: '170px', height: '170px',
-            background: 'radial-gradient(circle, rgba(74,222,128,0.35) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(0,105,112,0.35) 0%, transparent 70%)',
             borderRadius: '50%', pointerEvents: 'none'
           }}
         />
         {/* Logo image */}
         <motion.img
-          src="/icon-512-v3.png"
-          alt="Ranas Jiu Jitsu"
+          src={BRAND.logoMark}
+          alt="DP Sistemas"
           animate={{ rotate: [0, 2, -2, 0] }}
           transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
           style={{
-            width: '130px', height: '130px',
-            borderRadius: '32px',
-            boxShadow: '0 0 60px rgba(74,222,128,0.4), 0 20px 60px rgba(0,0,0,0.8)',
-            border: '2px solid rgba(74,222,128,0.3)',
+            width: '150px', height: '142px',
+            objectFit: 'contain',
             position: 'relative', zIndex: 2
           }}
         />
@@ -179,13 +175,13 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
             fontSize: '1.6rem', fontWeight: 900, letterSpacing: '-0.5px',
             color: '#fff', lineHeight: 1.1
           }}>
-            RANAS <span style={{ color: '#4ade80' }}>JIU JITSU</span>
+            DP <span style={{ color: '#1aa3ab' }}>SISTEMAS</span>
           </div>
           <div style={{
             fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.25em',
             color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginTop: '0.3rem'
           }}>
-            {cachedSedeName} • Chile
+            {BRAND.product}
           </div>
         </motion.div>
       </motion.div>
@@ -208,9 +204,9 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
             transition={{ duration: 2, ease: 'easeInOut', delay: 0.2 }}
             style={{
               height: '100%',
-              background: 'linear-gradient(90deg, #4ade80, #22d3ee)',
+              background: 'linear-gradient(90deg, #006970, #1aa3ab)',
               borderRadius: '10px',
-              boxShadow: '0 0 10px rgba(74,222,128,0.6)'
+              boxShadow: '0 0 10px rgba(0,105,112,0.55)'
             }}
           />
         </div>
@@ -227,7 +223,7 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
           letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600
         }}
       >
-        Ranapp • Portal de Alumnos
+            DP Sistemas • Automatizaciones
       </motion.div>
     </motion.div>
   );
@@ -241,242 +237,107 @@ import type {
   Video,
   Student,
   PlanFees,
-  AutomationConfig
+  AutomationConfig,
+  ClassSlot
 } from './types';
+import { BRAND, avatarSrc, appPath } from './brand';
+import { MpLogo } from './MpLogo';
+import ProductLanding from './ProductLanding';
+import StudentFile from './StudentFile';
+import SchedulePanel from './SchedulePanel';
+import AttendancePanel from './AttendancePanel';
+import StudentAccess from './StudentAccess';
+import PaymentsPanel from './PaymentsPanel';
+import GradesPanel from './GradesPanel';
+import EventsPanel from './EventsPanel';
+import EventPublic, { OpenEventsCard } from './EventPublic';
+import LibraryPanel from './LibraryPanel';
+import StudentLibrary from './StudentLibrary';
+import DashboardPanel from './DashboardPanel';
+import PanelTabs from './PanelTabs';
+import './panel-shell.css';
+import { DEFAULT_SLOTS, defaultCapacity, groupByDay, isOpenMat, timesOverlap } from './data/schedule';
+import { planLabel, planWeeklyMax } from './data/plans';
+import { currentRankLabel, formatShortDate, withProgress } from './data/grades';
+import { calculateIBJJFCategory } from './data/ibjjf';
+import BeltPath from './BeltPath';
+import { DEMO_LOCK, demoAlert } from './demo';
+import ModuleBoundary from './ModuleBoundary';
+import DemoGuide from './DemoGuide.tsx';
 
-// Detect environment: Capacitor native apps run on localhost bridge (capacitor://localhost or http://localhost)
-// but must connect to the production server. We always use VITE_API_URL if set (baked in at build time).
-// Robust detection for Capacitor webview (Android runs on http://localhost with no port, iOS on capacitor://)
+// Este origen (localhost:5173) corrió antes la app de Ranas. Sin esto,
+// localStorage restaura alumnos, fotos y sesión de esa academia.
+const DP_STORAGE_VERSION = 'dp-demo-v2';
+if (typeof window !== 'undefined' && localStorage.getItem('__dp_storage_version') !== DP_STORAGE_VERSION) {
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem('__dp_storage_version', DP_STORAGE_VERSION);
+}
+
+// Detect environment: Capacitor native apps run on localhost bridge.
 const _isCapacitor = typeof window !== 'undefined' && (
   !!(window as any).Capacitor || 
   window.location.href.includes('capacitor://') || 
   (window.location.hostname === 'localhost' && window.location.port === '')
 );
-const _isLocalDev = window.location.hostname === 'localhost' && !_isCapacitor;
 let API_URL: string = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
-  : (_isLocalDev ? 'http://localhost:3002' : 'https://dojo-demo-server.onrender.com');
+  : 'http://localhost:3002';
 
-// Force production URL if running inside native app (even if VITE_API_URL was baked as localhost)
-if (_isCapacitor && API_URL.includes('localhost')) {
-  API_URL = 'https://dojo-demo-server.onrender.com';
-}
+const getFallbackAvatarUrl = (_name?: string) => BRAND.mascotAvatar;
 
-const getFallbackAvatarUrl = (name?: string) => {
-  const safeName = (name || 'Ranas Student').trim();
-  const parts = safeName.split(' ').filter(Boolean);
-  const initials = parts.length >= 2 
-    ? (parts[0][0] + parts[1][0]).toUpperCase() 
-    : (parts[0] ? parts[0].substring(0, 2).toUpperCase() : 'RJ');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
-    <rect width="100" height="100" rx="50" fill="#05a86a"/>
-    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="38">${initials}</text>
-  </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-};
+const studentPhoto = (student?: { avatar?: string | null } | null) => avatarSrc(student?.avatar, API_URL);
 
 const newsItems = [
   {
-    title: "Frog Challenge Kids eleva el nivel y pone al sur en el mapa del Jiu Jitsu infantil",
-    body: "Más de 80 niños y adolescentes dieron vida a la tercera edición del torneo organizado por Ranas Jiu Jitsu, que reunió a equipos de distintas regiones en el gimnasio municipal de la capital penquista.",
-    img: "/assets/news_frog_challenge_v2.jpg",
-    link: "https://www.diarioconcepcion.cl/deportes/2025/07/15/frog-challenge-kids-eleva-el-nivel-y-pone-al-sur-en-el-mapa-del-jiu-jitsu-infantil.html",
-    label: "Noticias del Dojo",
-    date: "15 Jul, 2025",
+    title: "Torneo Interacademias: 120 cupos abiertos",
+    body: "Inscribe alumnos o invita a otras academias. Categorías por edad, peso y grado, con pago de inscripción en línea.",
+    img: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200",
+    link: "",
+    label: "Eventos",
+    date: "24 Oct, 2026",
     stats: [
-      { label: 'Evento', text: 'Frog Challenge 3' },
-      { label: 'Participantes', text: '80+ Atletas' },
-      { label: 'Sede', text: 'Gimnasio Municipal' },
-      { label: 'Organiza', text: 'Ranas Jiu Jitsu' }
+      { label: 'Cupos', text: '120' },
+      { label: 'Inscripción', text: '$15.000' },
+      { label: 'Sede', text: 'Centro' },
+      { label: 'Organiza', text: 'Academia Demo' }
     ]
   },
   {
-    title: "Manuel Plaza: penquista suma medallas en tatamis estadounidenses",
-    body: "El profesor Manuel Plaza conquistó cuatro medallas, dos de ellas de oro, en el Oklahoma City International Open. El deportista se formó al alero del destacado instructor Reinaldo Duguet.",
-    img: "/assets/news_manuel_medals_v2.jpeg",
-    link: "https://www.diarioconcepcion.cl/deportes/2023/02/16/manuel-plaza-penquista-suma-medallas-en-tatamis-estadounidenses.html",
-    label: "Logro Internacional",
-    date: "16 Feb, 2023",
+    title: "Nuevo horario de Jiu Jitsu y Kickboxing",
+    body: "Cambias horarios y cupos en el panel: el horario se actualiza y queda listo para una historia de Instagram.",
+    img: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200",
+    link: "",
+    label: "Horarios",
+    date: "18 Ago, 2026",
     stats: [
-      { label: 'Torneo', text: 'Oklahoma City Open' },
-      { label: 'Medallas', text: '2 Oros, 2 Platas' },
-      { label: 'Ranking', text: '#155 Mundial' },
-      { label: 'Categoría', text: 'Master 1 Súper Pesado' }
+      { label: 'Sedes', text: '3' },
+      { label: 'Disciplinas', text: 'BJJ · KB · MMA' },
+      { label: 'App', text: 'Alumno' },
+      { label: 'Redes', text: 'Instagram' }
     ]
   },
   {
-    title: "Canal 9 Biobío: BJJ como Herramienta de Formación Integral",
-    body: "En entrevista con Canal 9, Manuel Plaza destacó el impacto del Brazilian Jiu Jitsu en menores de 5 a 17 años, fomentando el autocontrol y la disciplina como bases del desarrollo personal.",
-    img: "https://images.unsplash.com/photo-1552072047-54d19335391c?w=800",
-    link: "https://www.canal9.cl/episodios/nuestra-casa/2025/07/09/llega-la-tercera-version-del-frog-challenge-kids-torneo-de-jiu-jitsu-juvenil-se-toma-concepcion",
-    label: "Entrevista Canal 9",
-    date: "09 Jul, 2025",
+    title: "Biblioteca técnica: Armbar desde guardia",
+    body: "Publica videos y PDFs por cinturón. El alumno ve su progreso y el profesor hace seguimiento.",
+    img: "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=1200",
+    link: "",
+    label: "Material",
+    date: "12 Ago, 2026",
     stats: [
-      { label: 'Cobertura', text: 'Canal 9 Biobío' },
-      { label: 'Programa', text: 'Nuestra Casa' },
-      { label: 'Enfoque', text: 'Formación Integral' },
-      { label: 'Edades', text: '5 a 17 años' }
+      { label: 'Formato', text: 'Video' },
+      { label: 'Grados', text: 'Blanco y Azul' },
+      { label: 'Duración', text: '06:24' },
+      { label: 'Sedes', text: 'Todas' }
     ]
   }
 ];
 
-const KIDS_SCHEDULE = [
-  { day: 'Martes', classes: [{ time: '18:00', name: 'Pequeños Campeones' }] },
-  { day: 'Miércoles', classes: [{ time: '16:45', name: 'Pequeños Campeones' }] },
-  { day: 'Jueves', classes: [{ time: '18:00', name: 'Pequeños Campeones' }] },
-  { day: 'Viernes', classes: [{ time: '16:45', name: 'Pequeños Campeones' }] },
-  { day: 'Sábado', classes: [{ time: '11:00', name: 'Pequeños Campeones' }] }
-];
-
-const ADULT_SCHEDULE = [
-  { day: 'Lunes', classes: [{ time: '19:30', name: 'Ranas On Fire' }] },
-  { day: 'Martes', classes: [{ time: '06:45', name: 'Valientes' }, { time: '19:00', name: 'Ranas On Fire' }] },
-  { day: 'Miércoles', classes: [{ time: '19:30', name: 'Ranas On Fire' }] },
-  { day: 'Jueves', classes: [{ time: '19:00', name: 'Ranas On Fire' }] },
-  { day: 'Viernes', classes: [{ time: '06:45', name: 'Valientes' }, { time: '20:00', name: 'Competidor' }] },
-  { day: 'Sábado', classes: [{ time: '12:00', name: 'Open Mat' }] }
-];
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// IBJJF Category Calculator (Official IBJJF Weight & Age Divisions with Gi)
-// ─────────────────────────────────────────────────────────────────────────────
-function calculateIBJJFCategory(birthDate?: string | null, weightKg?: number | null, gender?: 'MALE' | 'FEMALE' | string | null, beltStr: string = 'WHITE') {
-  let age = 0;
-  if (birthDate) {
-    const birth = new Date(birthDate);
-    if (!isNaN(birth.getTime())) {
-      const now = new Date();
-      age = now.getFullYear() - birth.getFullYear();
-      const m = now.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
-    }
-  }
-
-  const hasGender = gender === 'MALE' || gender === 'FEMALE';
-  const isFemale = gender === 'FEMALE';
-  const weight = weightKg && Number(weightKg) > 0 ? Number(weightKg) : 0;
-
-  // 1. IBJJF Age Categories
-  let ageCategory = age > 0 ? 'Adulto (18-29 años)' : 'Sin fecha nac.';
-  let isJuvenile = false;
-
-  if (age > 0 && age < 16) {
-    if (age < 7) ageCategory = 'Pre-Infantil (< 7 años)';
-    else if (age <= 9) ageCategory = 'Infantil A (7-9 años)';
-    else if (age <= 12) ageCategory = 'Infantil B (10-12 años)';
-    else ageCategory = 'Infanto-Juvenil (13-15 años)';
-  } else if (age >= 16 && age <= 17) {
-    isJuvenile = true;
-    ageCategory = 'Juvenil (16-17 años)';
-  } else if (age >= 18 && age <= 29) {
-    ageCategory = 'Adulto (18-29 años)';
-  } else if (age >= 30 && age <= 35) {
-    ageCategory = 'Master 1 (30-35 años)';
-  } else if (age >= 36 && age <= 40) {
-    ageCategory = 'Master 2 (36-40 años)';
-  } else if (age >= 41 && age <= 45) {
-    ageCategory = 'Master 3 (41-45 años)';
-  } else if (age >= 46 && age <= 50) {
-    ageCategory = 'Master 4 (46-50 años)';
-  } else if (age >= 51 && age <= 55) {
-    ageCategory = 'Master 5 (51-55 años)';
-  } else if (age >= 56) {
-    ageCategory = 'Master 6 (56+ años)';
-  }
-
-  // 2. IBJJF Weight Divisions (Official Table with Kimono / Gi)
-  let divisionName = 'Pendiente de peso';
-  let weightLimitText = '';
-
-  if (!hasGender) {
-    divisionName = 'Por definir género';
-  } else if (weight > 0) {
-    if (isJuvenile && !isFemale) {
-      // JUVENIL MASCULINO
-      if (weight <= 53.50) { divisionName = 'Rooster / Galo'; weightLimitText = '≤ 53.50 kg'; }
-      else if (weight <= 58.50) { divisionName = 'Light Feather / Pluma'; weightLimitText = '≤ 58.50 kg'; }
-      else if (weight <= 64.00) { divisionName = 'Feather / Pena'; weightLimitText = '≤ 64.00 kg'; }
-      else if (weight <= 69.00) { divisionName = 'Light / Leve'; weightLimitText = '≤ 69.00 kg'; }
-      else if (weight <= 74.00) { divisionName = 'Middle / Médio'; weightLimitText = '≤ 74.00 kg'; }
-      else if (weight <= 79.30) { divisionName = 'Medium Heavy / Meio-Pesado'; weightLimitText = '≤ 79.30 kg'; }
-      else if (weight <= 84.30) { divisionName = 'Heavy / Pesado'; weightLimitText = '≤ 84.30 kg'; }
-      else if (weight <= 89.30) { divisionName = 'Super Heavy / Super Pesado'; weightLimitText = '≤ 89.30 kg'; }
-      else { divisionName = 'Ultra Heavy / Pesadíssimo'; weightLimitText = '> 89.30 kg'; }
-    } else if (isJuvenile && isFemale) {
-      // JUVENIL FEMENINO
-      if (weight <= 44.30) { divisionName = 'Rooster / Galo'; weightLimitText = '≤ 44.30 kg'; }
-      else if (weight <= 48.30) { divisionName = 'Light Feather / Pluma'; weightLimitText = '≤ 48.30 kg'; }
-      else if (weight <= 52.50) { divisionName = 'Feather / Pena'; weightLimitText = '≤ 52.50 kg'; }
-      else if (weight <= 56.50) { divisionName = 'Light / Leve'; weightLimitText = '≤ 56.50 kg'; }
-      else if (weight <= 60.50) { divisionName = 'Middle / Médio'; weightLimitText = '≤ 60.50 kg'; }
-      else if (weight <= 65.00) { divisionName = 'Medium Heavy / Meio-Pesado'; weightLimitText = '≤ 65.00 kg'; }
-      else if (weight <= 69.00) { divisionName = 'Heavy / Pesado'; weightLimitText = '≤ 69.00 kg'; }
-      else { divisionName = 'Super Heavy / Super Pesado'; weightLimitText = '> 69.00 kg'; }
-    } else if (isFemale) {
-      // ADULTO & MASTERS FEMENINO
-      if (weight <= 48.50) { divisionName = 'Rooster / Galo'; weightLimitText = '≤ 48.50 kg'; }
-      else if (weight <= 53.50) { divisionName = 'Light Feather / Pluma'; weightLimitText = '≤ 53.50 kg'; }
-      else if (weight <= 58.50) { divisionName = 'Feather / Pena'; weightLimitText = '≤ 58.50 kg'; }
-      else if (weight <= 64.00) { divisionName = 'Light / Leve'; weightLimitText = '≤ 64.00 kg'; }
-      else if (weight <= 69.00) { divisionName = 'Middle / Médio'; weightLimitText = '≤ 69.00 kg'; }
-      else if (weight <= 74.00) { divisionName = 'Medium Heavy / Meio-Pesado'; weightLimitText = '≤ 74.00 kg'; }
-      else if (weight <= 79.30) { divisionName = 'Heavy / Pesado'; weightLimitText = '≤ 79.30 kg'; }
-      else { divisionName = 'Super Heavy / Super Pesado'; weightLimitText = '> 79.30 kg'; }
-    } else {
-      // ADULTO & MASTERS MASCULINO
-      if (weight <= 57.50) { divisionName = 'Rooster / Galo'; weightLimitText = '≤ 57.50 kg'; }
-      else if (weight <= 64.00) { divisionName = 'Light Feather / Pluma'; weightLimitText = '≤ 64.00 kg'; }
-      else if (weight <= 70.00) { divisionName = 'Feather / Pena'; weightLimitText = '≤ 70.00 kg'; }
-      else if (weight <= 76.00) { divisionName = 'Light / Leve'; weightLimitText = '≤ 76.00 kg'; }
-      else if (weight <= 82.30) { divisionName = 'Middle / Médio'; weightLimitText = '≤ 82.30 kg'; }
-      else if (weight <= 88.30) { divisionName = 'Medium Heavy / Meio-Pesado'; weightLimitText = '≤ 88.30 kg'; }
-      else if (weight <= 94.30) { divisionName = 'Heavy / Pesado'; weightLimitText = '≤ 94.30 kg'; }
-      else if (weight <= 100.50) { divisionName = 'Super Heavy / Super Pesado'; weightLimitText = '≤ 100.50 kg'; }
-      else { divisionName = 'Ultra Heavy / Pesadíssimo'; weightLimitText = '> 100.50 kg'; }
-    }
-  }
-
-  const beltLabels: Record<string, string> = {
-    WHITE: 'Cinturón Blanco',
-    BLUE: 'Cinturón Azul',
-    PURPLE: 'Cinturón Morado',
-    BROWN: 'Cinturón Marrón',
-    BLACK: 'Cinturón Negro',
-    GRAY: 'Cinturón Gris'
-  };
-
-  const beltName = beltLabels[beltStr] || beltStr;
-  const genderText = hasGender ? (isFemale ? 'Femenino' : 'Masculino') : 'Por definir';
-  const ageShort = ageCategory.split(' ')[0];
-
-  let fullCategoryString = `${ageShort} • ${beltName}`;
-  if (hasGender && weight > 0) {
-    fullCategoryString += ` • ${genderText} • ${divisionName}${weightLimitText ? ` (${weightLimitText})` : ''}`;
-  } else if (hasGender && weight === 0) {
-    fullCategoryString += ` • ${genderText} • (Ingresa tu peso en kg)`;
-  } else {
-    fullCategoryString += ` • (Selecciona género y peso para calcular)`;
-  }
-
-  return {
-    age,
-    ageCategory,
-    divisionName,
-    weightLimitText,
-    beltName,
-    genderText,
-    hasGender,
-    fullCategoryString
-  };
-}
 
 const VIDEO_CATEGORIES = [
-  'Derribos',
-  '100 kilos',
-  'Espalda',
-  'Montada',
-  'Guardia cerrada'
+  'Técnicas',
+  'Reglamento',
+  'Preparación'
 ];
 
 const App: React.FC = () => {
@@ -487,10 +348,6 @@ const App: React.FC = () => {
     return false;
   });
   const [viewMode, setViewMode] = useState<ViewMode>(() => localStorage.getItem('viewMode') as ViewMode || 'landing');
-  const [showRanappModal, setShowRanappModal] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [isLandingMobileMenuOpen, setIsLandingMobileMenuOpen] = useState(false);
   const [noticeData, setNoticeData] = useState({ 
     subject: '', 
     message: ''
@@ -501,15 +358,20 @@ const App: React.FC = () => {
     return s && s !== 'null' ? Number(s) : null;
   });
   const [sedes, setSedes] = useState<any[]>([]);
+  const [classSlots, setClassSlots] = useState<ClassSlot[]>(DEFAULT_SLOTS);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [currentUser, setCurrentUser] = useState<Student | null>(() => {
-    const u = localStorage.getItem('currentUser');
-    return u ? JSON.parse(u) : null;
+    try {
+      const u = localStorage.getItem('currentUser');
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
   });
   const [multiStudentAuthOptions, setMultiStudentAuthOptions] = useState<Student[]>([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // PWA States and Logic
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOSStandalone, setIsIOSStandalone] = useState<boolean>(false);
 
   useEffect(() => {
@@ -521,39 +383,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    const handleAppInstalled = () => {
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        setShowRanappModal(false);
-      }
-    } else {
-      setShowRanappModal(true);
-    }
-  };
-
-  // --- UTILITIES ---
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
     const day = d.getDay() || 7;
@@ -581,45 +410,54 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const currentWeekStart = getWeekStart(new Date());
     const scheduled = currentUser.scheduledClasses || [];
+    const slot = classSlots.find((s) => s.day === day && s.startTime === time && s.name === name);
+    const openMat = isOpenMat(name);
     
-    // Identificar si ya está marcado este horario específico
     const isBooked = scheduled.some(c => c.day === day && c.time === time && c.timestamp >= currentWeekStart);
     
     let newScheduled = [];
     if (isBooked) {
-      // Si ya estaba, lo quitamos (Toggle OFF)
       newScheduled = scheduled.filter(c => !(c.day === day && c.time === time && c.timestamp >= currentWeekStart));
     } else {
-      // Lógica de límites del plan
-      let planMax = 2;
-      if (currentUser.plan?.toLowerCase().includes('ilimitado')) {
-        planMax = 99;
-      } else if (currentUser.plan) {
-        const match = currentUser.plan.match(/^(\d+)/);
-        planMax = match ? parseInt(match[1]) : 2;
+      const enrolled = students.filter((st) =>
+        (st.scheduledClasses || []).some((sc) => sc.timestamp >= currentWeekStart && sc.day === day && sc.time === time)
+      ).length;
+      const cap = slot?.capacity ?? null;
+      if (cap && cap > 0 && enrolled >= cap) {
+        alert('Esta clase está completa.');
+        return;
       }
 
-      const thisWeekClasses = scheduled.filter(c => c.timestamp >= currentWeekStart);
-
-      if (thisWeekClasses.length >= planMax) {
-        // En lugar de bloquear, si el límite es 1, lo reemplazamos automáticamente
-        // para evitar que el usuario se sienta "atrapado".
-        if (planMax === 1) {
-          const otherWeeks = scheduled.filter(c => c.timestamp < currentWeekStart);
-          newScheduled = [...otherWeeks, { timestamp: new Date().getTime(), day, time, name }];
-        } else {
-          alert(`Has alcanzado el límite de tu plan (${planMax} clases por semana). Desmarca una para seleccionar otra.`);
+      if (slot) {
+        const overlapsOwn = scheduled.some((c) => {
+          if (c.timestamp < currentWeekStart || c.day !== day) return false;
+          const other = classSlots.find((s) => s.day === c.day && s.startTime === c.time);
+          if (!other) return c.time === time;
+          return timesOverlap(slot.startTime, slot.endTime, other.startTime, other.endTime);
+        });
+        if (overlapsOwn) {
+          alert('Ya tienes otra clase en ese horario.');
           return;
         }
-      } else {
-        newScheduled = [...scheduled, { timestamp: new Date().getTime(), day, time, name }];
       }
+
+      let planMax = planWeeklyMax(currentUser.plan);
+
+      const thisWeekPlan = scheduled.filter((c) => c.timestamp >= currentWeekStart && !isOpenMat(c.name));
+
+      if (!openMat && thisWeekPlan.length >= planMax) {
+        alert(`Tu plan permite ${planMax} clases por semana. El Open Mat no gasta ese cupo.`);
+        return;
+      }
+
+      newScheduled = [...scheduled, { timestamp: new Date().getTime(), day, time, name }];
     }
     handleUpdateStudent({ ...currentUser, scheduledClasses: newScheduled as any[] });
   };
 
   const handleLogout = () => {
     localStorage.clear();
+    localStorage.setItem('__dp_storage_version', DP_STORAGE_VERSION);
     setViewMode('landing');
     setRole('guest');
     setCurrentUser(null);
@@ -637,7 +475,7 @@ const App: React.FC = () => {
   const [activeHeroVideo, setActiveHeroVideo] = useState(0);
   const [activeNews, setActiveNews] = useState(0);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'students' | 'payments' | 'settings' | 'videos' | 'website' | 'communications'>(() => localStorage.getItem('activeTab') as any || 'dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'students' | 'payments' | 'settings' | 'videos' | 'website' | 'communications' | 'schedule' | 'grades' | 'events'>(() => localStorage.getItem('activeTab') as any || 'dashboard');
 
   useEffect(() => {
     localStorage.setItem('viewMode', viewMode);
@@ -655,31 +493,24 @@ const App: React.FC = () => {
     }
   }, [viewMode, role, currentUser, activeTab, activeSedeId]);
   const [liveNews, setLiveNews] = useState(newsItems);
-  const [liveHeroVideos, setLiveHeroVideos] = useState([
-    "/assets/WhatsApp Video 2026-03-04 at 3.29.01 PM.mp4",
-    "/assets/WhatsApp Video 2026-03-04 at 3.29.02 PM.mp4",
-    "/assets/WhatsApp Video 2026-03-04 at 3.29.03 PM.mp4"
-  ]);
+  const [liveHeroVideos, setLiveHeroVideos] = useState<string[]>([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [studentFilterAge, setStudentFilterAge] = useState<'ALL' | 'KIDS' | 'ADULTS'>('ALL');
   const [studentFilterPayment, setStudentFilterPayment] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
   const [studentFilterBelt, setStudentFilterBelt] = useState<Belt | 'ALL'>('ALL');
   const [studentFilterIBJJFCategory, setStudentFilterIBJJFCategory] = useState<string>('ALL');
   const [liveGallery, setLiveGallery] = useState([
-    { img: '/assets/WhatsApp Image 2026-03-04 at 3.39.08 PM.jpeg', size: 'large' },
-    { img: '/assets/frog_challenge.jpeg', size: 'small' },
-    { img: '/assets/frog_combat_1.jpeg', size: 'small' },
-    { img: 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800', size: 'tall' },
-    { img: '/assets/frog_face.jpeg', size: 'small' },
-    { img: 'https://images.unsplash.com/photo-1555597673-b21d5c935865?w=800', size: 'wide' },
-    { img: '/assets/frog_combat_2.jpeg', size: 'small' },
-    { img: 'https://images.unsplash.com/photo-1552072047-54d19335391c?w=800', size: 'small' },
+    { img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200', size: 'large' as const },
+    { img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800', size: 'small' as const },
+    { img: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=800', size: 'small' as const },
+    { img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800', size: 'tall' as const },
+    { img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800', size: 'wide' as const },
   ]);
   const [isAddingGallery, setIsAddingGallery] = useState(false);
   const [newGalleryData, setNewGalleryData] = useState<{ img: string, size: 'small' | 'wide' | 'tall' | 'large' }>({ img: '', size: 'small' });
 
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [showQRModal, setShowQRModal] = useState(false);
+  const [showStudentAccess, setShowStudentAccess] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [manualPaymentDates, setManualPaymentDates] = useState<Record<string, string>>({});
   const [isGeneratingPayment, setIsGeneratingPayment] = useState(false);
@@ -833,7 +664,7 @@ const App: React.FC = () => {
       isAddingNews ||
       isAddingGallery ||
       rawImageForCrop ||
-      showQRModal
+      showStudentAccess
     );
     if (isAnyModalOpen) {
       document.documentElement.classList.add('modal-open');
@@ -853,7 +684,7 @@ const App: React.FC = () => {
     isAddingNews,
     isAddingGallery,
     rawImageForCrop,
-    showQRModal
+    showStudentAccess
   ]);
 
   // Password recovery state
@@ -865,6 +696,9 @@ const App: React.FC = () => {
   const [isNoticeDismissed, setIsNoticeDismissed] = useState(false);
   const [isSendingBirthdays, setIsSendingBirthdays] = useState(false);
   const [categorySavedSuccess, setCategorySavedSuccess] = useState(false);
+  const [commTab, setCommTab] = useState<'aviso' | 'cumple' | 'preview'>('aviso');
+  const [webTab, setWebTab] = useState<'hero' | 'news' | 'gallery'>('hero');
+  const [settingsTab, setSettingsTab] = useState<'ninos' | 'adultos' | 'claves'>('claves');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -880,8 +714,22 @@ const App: React.FC = () => {
     // Carga ultrarrápida e independiente de videos (< 1 seg)
     fetch(`${API_URL}/api/videos${queryParams}`)
       .then(res => res.json())
-      .then(videosData => { if (Array.isArray(videosData)) setVideos(videosData); })
+      .then(videosData => {
+        if (Array.isArray(videosData)) setVideos(videosData);
+      })
       .catch(e => console.error("Error cargando videos:", e));
+
+    fetch(`${API_URL}/api/schedule${queryParams}`)
+      .then(res => res.json())
+      .then(scheduleData => {
+        if (Array.isArray(scheduleData) && scheduleData.length) {
+          setClassSlots(scheduleData.map((s: ClassSlot) => ({
+            ...s,
+            capacity: s.capacity === undefined ? defaultCapacity(s.name) : s.capacity,
+          })));
+        }
+      })
+      .catch(() => setClassSlots(DEFAULT_SLOTS));
 
     // Carga independiente de notificaciones
     fetch(`${API_URL}/api/global-notice${queryParams}`)
@@ -1005,6 +853,29 @@ const App: React.FC = () => {
 
 
 
+  const handleSaveSchedule = async (slots: ClassSlot[]) => {
+    setSavingSchedule(true);
+    try {
+      const queryParams = activeSedeId ? `?sedeId=${activeSedeId}` : '';
+      const response = await fetch(`${API_URL}/api/schedule${queryParams}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slots })
+      });
+      if (response.ok) {
+        const saved = await response.json().catch(() => slots);
+        setClassSlots(Array.isArray(saved) && saved.length ? saved : slots);
+      } else {
+        alert('No se pudo guardar el horario.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error de conexión al guardar el horario.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
   const syncWebsite = async (type: 'news' | 'gallery' | 'hero-videos', data: any) => {
     try {
       const endpoint = type === 'hero-videos' ? 'hero-videos' : type;
@@ -1046,6 +917,19 @@ const App: React.FC = () => {
       if (updatedStudent.gender !== undefined) payload.gender = updatedStudent.gender;
       if (updatedStudent.sedeId !== undefined) payload.sedeId = updatedStudent.sedeId;
       if (updatedStudent.sede_id !== undefined) payload.sedeId = updatedStudent.sede_id;
+      if (updatedStudent.progress !== undefined) payload.progress = updatedStudent.progress;
+      const prevStudent = students.find((s) => String(s.id) === String(updatedStudent.id));
+      payload.ficha = {
+        tutorName: updatedStudent.tutorName ?? prevStudent?.tutorName ?? '',
+        tutorEmail: updatedStudent.tutorEmail ?? prevStudent?.tutorEmail ?? '',
+        tutorPhone: updatedStudent.tutorPhone ?? prevStudent?.tutorPhone ?? '',
+        tutorRelation: updatedStudent.tutorRelation ?? prevStudent?.tutorRelation ?? '',
+        emergencyName: updatedStudent.emergencyName ?? prevStudent?.emergencyName ?? '',
+        emergencyPhone: updatedStudent.emergencyPhone ?? prevStudent?.emergencyPhone ?? '',
+        emergencyRelation: updatedStudent.emergencyRelation ?? prevStudent?.emergencyRelation ?? '',
+        allergies: updatedStudent.allergies ?? prevStudent?.allergies ?? '',
+        discipline: updatedStudent.discipline ?? prevStudent?.discipline ?? '',
+      };
 
       const response = await fetch(`${API_URL}/api/students/${updatedStudent.id}`, {
         method: 'PUT',
@@ -1081,21 +965,8 @@ const App: React.FC = () => {
 
 
 
-  const handleDeleteStudent = async (studentId: string) => {
-    try {
-      const response = await fetch(`${API_URL}/api/students/${studentId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (response.ok) {
-        setStudents(prev => prev.filter(s => s.id !== studentId));
-        setSelectedStudent(null);
-      } else {
-        alert('Error al eliminar alumno');
-      }
-    } catch (error) {
-      console.error("Error deleting student:", error);
-    }
+  const handleDeleteStudent = async (_studentId: string) => {
+    demoAlert('students');
   };
 
 
@@ -1208,8 +1079,8 @@ const App: React.FC = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
 
   const [fees, setFees] = useState<PlanFees>({
-    adults: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 },
-    kids: { '1': 5000, '1x': 20000, '2': 35000, '3': 40000, '4': 45000, 'Ilimitado': 50000 }
+    adults: { '1': 20000, '1x': 20000, '2': 25000, '3': 35000, '4': 40000, 'Ilimitado': 45000 },
+    kids: { '1': 18000, '1x': 18000, '2': 25000, '3': 35000, '4': 40000, 'Ilimitado': 45000 }
   });
 
   const handleSaveFees = async (updatedFees: PlanFees) => {
@@ -1356,7 +1227,7 @@ const App: React.FC = () => {
     }
   };
 
-  const [automation, setAutomation] = useState<AutomationConfig>({ reminderDay: 5, whatsappTemplate: "Hola {nombre}...", emailTemplate: "Hola {nombre}..." });
+  const [automation, setAutomation] = useState<AutomationConfig>({ reminderDay: 5, reminderEnabled: true, mercadoPago: true, transfer: true, whatsappTemplate: "Hola {nombre}...", emailTemplate: "Hola {nombre}..." });
 
   const handleSaveAutomation = async (updatedAutomation: AutomationConfig) => {
     try {
@@ -1383,6 +1254,12 @@ const App: React.FC = () => {
     }
     return age;
   };
+
+  useEffect(() => {
+    if (role !== 'student') return;
+    const audience = calculateAge(currentUser?.birthDate || null) < 18 ? 'KIDS' : 'ADULTS';
+    const days = groupByDay(classSlots, audience);
+  }, [role, classSlots, currentUser?.id]);
 
   const getUpcomingBirthdays = () => {
     const today = new Date();
@@ -1413,7 +1290,7 @@ const App: React.FC = () => {
   };
 
   const beltLabels: Record<Belt, string> = { WHITE: 'Blanco', BLUE: 'Azul', PURPLE: 'Morado', BROWN: 'Marrón', BLACK: 'Negro', GRAY: 'Gris' };
-  const planLabels: Record<string, string> = { '1': 'Clase Individual', '1x': '1x Semana', '2': '2x Semana', '3': '3x Semana', '4': '4x Semana', 'Ilimitado': 'Full Rana' };
+  const planLabels: Record<string, string> = { '1': 'Clase Individual', '1x': '1x Semana', '2': '2x Semana', '3': '3x Semana', '4': '4x Semana', 'Ilimitado': 'Plan Libre' };
   const formatCLP = (amount: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(amount);
 
   // Formatea una fecha YYYY-MM-DD → DD/MM/YYYY (o texto corto de mes si se pide)
@@ -1705,7 +1582,7 @@ const App: React.FC = () => {
 
   const handleAddVideo = async () => {
     try {
-      let videoThumbnail = 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800'; 
+      let videoThumbnail = 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=800'; 
       
       const videoId = getYouTubeID(newVideoData.url);
       if (videoId) {
@@ -1732,6 +1609,13 @@ const App: React.FC = () => {
   };
 
   // ── Splash Screen gate ──────────────────────────────────────────────────────
+  const eventSlug = typeof window !== 'undefined'
+    ? window.location.pathname.match(new RegExp(`^${appPath('/evento')}/([^/]+)`))?.[1]
+    : null;
+  if (eventSlug) {
+    return <EventPublic slug={decodeURIComponent(eventSlug)} apiUrl={API_URL} />;
+  }
+
   if (isSplashVisible) {
     return (
       <AnimatePresence>
@@ -1742,607 +1626,7 @@ const App: React.FC = () => {
   // ────────────────────────────────────────────────────────────────────────────
 
   if (viewMode === 'landing') {
-    return (
-      <motion.div
-        key="landing"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0, y: -15 }}
-        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-        className="landing-page" style={{ background: 'var(--bg-main)', color: 'var(--text-main)' }}>
-        {/* Navbar */}
-        <nav className="mobile-nav-compact" style={{ position: 'fixed', top: '2.5rem', left: '0', right: '0', zIndex: 1000, display: 'flex', justifyContent: 'center' }}>
-          <div className="glass" style={{ padding: '0.8rem 2rem', display: 'flex', gap: '2rem', alignItems: 'center', borderRadius: '100px', border: '1px solid var(--glass-border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', position: 'relative' }}>
-              <div style={{ position: 'relative', display: 'flex' }}>
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '50px', height: '50px', background: 'var(--logo-green)', filter: 'blur(30px)', opacity: 0.6, borderRadius: '50%', zIndex: -1 }}></div>
-                <img src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg" alt="Logo" style={{ width: '35px', height: '35px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--logo-green)' }} />
-              </div>
-              <span className="nav-brand-text" style={{ fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>RANAS <span style={{ color: 'var(--logo-green)' }}>JIU JITSU</span></span>
-            </div>
-            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-              <div className="mobile-hide" style={{ display: 'flex', gap: '2rem' }}>
-                <a href="#inicio" style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8 }}>Inicio</a>
-                <a href="#profesor" style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8 }}>Noticias</a>
-                <a href="#gallery" style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8 }}>Galería</a>
-              </div>
-              <div className="mobile-hide" style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }} />
-              <button className="mobile-hide" onClick={handleInstallApp} style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', border: '1px solid #334155', padding: '0.6rem 1.2rem', borderRadius: '50px', fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', cursor: 'pointer', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
-                <Smartphone size={14} /> DESCARGAR RANAPP
-              </button>
-              <button style={{ background: 'var(--logo-green)', border: 'none', padding: '0.7rem 1.5rem', borderRadius: '50px', fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', cursor: 'pointer', color: '#fff' }} onClick={() => { setIsLandingMobileMenuOpen(false); setViewMode('auth'); }}>Entrar</button>
-              {isMobile && (
-                <button 
-                  onClick={() => setIsLandingMobileMenuOpen(!isLandingMobileMenuOpen)} 
-                  style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.2rem' }}
-                >
-                  {isLandingMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-                </button>
-              )}
-            </div>
-          </div>
-        </nav>
-
-        {/* Landing Mobile Menu Drawer */}
-        <AnimatePresence>
-          {isMobile && isLandingMobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              style={{
-                position: 'fixed',
-                top: '5.5rem',
-                left: '1rem',
-                right: '1rem',
-                background: 'var(--bg-glass)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: '24px',
-                border: '1px solid var(--glass-border)',
-                padding: '2rem',
-                zIndex: 999,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1.5rem',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.1)'
-              }}
-            >
-              <a href="#inicio" onClick={() => setIsLandingMobileMenuOpen(false)} style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center' }}>Inicio</a>
-              <a href="#profesor" onClick={() => setIsLandingMobileMenuOpen(false)} style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center' }}>Noticias</a>
-              <a href="#gallery" onClick={() => setIsLandingMobileMenuOpen(false)} style={{ fontWeight: 800, color: 'var(--text-main)', textDecoration: 'none', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center' }}>Galería</a>
-              <div style={{ width: '100%', height: '1px', background: 'var(--glass-border)' }} />
-              <button 
-                onClick={() => {
-                  handleInstallApp();
-                  setIsLandingMobileMenuOpen(false);
-                }} 
-                style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', border: '1px solid #334155', padding: '0.8rem 1.5rem', borderRadius: '50px', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase', cursor: 'pointer', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}
-              >
-                <Smartphone size={16} /> DESCARGAR RANAPP
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Hero Section - 1. INICIO */}
-        <section id="inicio" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '12rem 0 2rem', position: 'relative' }}>
-          <div className="mesh-gradient" style={{ opacity: 0.2 }} />
-          <div className="section-container">
-            <div className="responsive-stack" style={{ gap: '4rem', alignItems: 'center' }}>
-              <motion.div 
-                initial={{ opacity: 0, x: -50 }} 
-                animate={{ opacity: 1, x: 0 }} 
-                transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-                style={{ flex: 1 }}
-                className="mobile-center"
-              >
-                <span className="font-cartoon" style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '1.2rem', textTransform: 'uppercase', display: 'block', marginBottom: '2rem' }}>
-                  Concepción • Chile • Orompello 1421
-                </span>
-                <h1 className="font-martial pop-text" style={{ fontSize: '7rem', marginBottom: '3rem', color: 'var(--text-main)', maxWidth: '800px', lineHeight: 0.9 }}>
-                  ÚNETE AL <br />
-                  <span style={{ color: 'var(--logo-green)' }}>PODER</span> <br />
-                  <span style={{ color: 'transparent', WebkitTextStroke: '2px var(--tatami-black)' }}>ANFIBIO.</span>
-                </h1>
-                <p style={{ fontSize: 'clamp(1.1rem, 2vw, 1.4rem)', color: 'var(--text-muted)', marginBottom: '3rem', maxWidth: '800px', margin: '0 auto 3rem', lineHeight: 1.5, fontWeight: 500 }}>
-                  Domina el arte suave bajo el linaje de Manuel Plaza. Excelencia técnica y el máximo rendimiento deportivo en el corazón de Concepción.
-                </p>
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: window.innerWidth < 1024 ? 'center' : 'flex-start' }}>
-                  <button className="btn-cartoon" style={{ padding: '0.8rem 1.5rem', fontSize: '1rem' }} onClick={() => window.location.href = 'mailto:ranasjiujitsu@gmail.com'}>Contacto</button>
-                  <button className="btn-secondary" style={{ padding: '0.8rem 1.5rem', fontSize: '0.9rem' }} onClick={() => window.open('https://www.instagram.com/ranasjiujitsu/?hl=es')}>Instagram</button>
-                </div>
-              </motion.div>
-
-              <div className="hero-video-wrapper" style={{ marginTop: '2rem' }}>
-                <div className="hero-video-container"
-                  onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    (e.currentTarget as any).touchStart = touch.clientX;
-                  }}
-                  onTouchEnd={(e) => {
-                    const startX = (e.currentTarget as any).touchStart;
-                    const endX = e.changedTouches[0].clientX;
-                    if (startX - endX > 50) setActiveHeroVideo((activeHeroVideo + 1) % 3);
-                    if (endX - startX > 50) setActiveHeroVideo((activeHeroVideo - 1 + 3) % 3);
-                  }}
-                  style={{ overflow: 'visible' }}
-                >
-                  {liveHeroVideos.map((src, idx) => {
-                    const offset = (idx - activeHeroVideo + 3) % 3;
-                    const isCenter = offset === 0;
-                    return (
-                      <motion.div 
-                        key={src}
-                        animate={{ 
-                          scale: isCenter ? 1.05 : 0.8,
-                          x: offset === 0 ? 0 : offset === 1 ? 300 : -300,
-                          opacity: isCenter ? 1 : 0.6,
-                          rotateY: offset === 0 ? 0 : offset === 1 ? 20 : -20,
-                          zIndex: isCenter ? 50 : 10,
-                          filter: isCenter ? 'grayscale(0) blur(0px)' : 'grayscale(1) blur(2px)',
-                          pointerEvents: isCenter ? 'auto' : 'none'
-                        }}
-                        transition={{ 
-                          type: "spring", 
-                          stiffness: 100, 
-                          damping: 18
-                        }}
-                        className="hero-video-card"
-                        onClick={() => setActiveHeroVideo(idx)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <SocialVideoPlayer 
-                          src={src} 
-                          size="lg" 
-                          isActive={isCenter} 
-                          onEnded={() => setActiveHeroVideo((idx + 1) % 3)}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </div>
-                
-                <div className="slider-controls">
-                  <button className="slider-nav-btn" onClick={() => setActiveHeroVideo((activeHeroVideo - 1 + 3) % 3)}>
-                    <ChevronLeft size={32} strokeWidth={3} />
-                  </button>
-                  <button className="slider-nav-btn" onClick={() => setActiveHeroVideo((activeHeroVideo + 1) % liveHeroVideos.length)}>
-                    <ChevronRight size={32} strokeWidth={3} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 2. PROFESOR / NOTICIAS DESTACADAS */}
-        <section id="profesor" className="section-alt" style={{ padding: 'var(--section-padding) 0', position: 'relative' }}>
-          <div className="section-container">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeNews}
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -50 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                className="responsive-stack"
-                style={{ gap: '5rem', alignItems: 'center' }}
-              >
-                {/* Left Side: Newspaper Visual */}
-                <div style={{ position: 'relative', width: '100%', maxWidth: '500px' }}>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '100%', height: '100%', background: 'var(--logo-green)', filter: 'blur(100px)', opacity: 0.15, zIndex: -1 }}></div>
-                  <div style={{ borderRadius: '4rem', overflow: 'hidden', border: '1px solid var(--logo-green)', boxShadow: '0 40px 80px rgba(0,0,0,0.5)', background: '#fff' }}>
-                    <div style={{ padding: '1.5rem', borderBottom: '2px solid #000', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="font-martial" style={{ color: '#000', fontSize: '1.2rem' }}>DIARIO DEPORTIVO</span>
-                      <span style={{ color: '#000', fontWeight: 800, fontSize: '0.8rem' }}>{liveNews[activeNews].date}</span>
-                    </div>
-                    <img src={liveNews[activeNews].img} alt="Noticia" style={{ width: '100%', height: 'auto', minHeight: '300px', maxHeight: '500px', objectFit: 'cover', filter: 'sepia(0.2) contrast(1.1)' }} />
-                    <div style={{ padding: '2rem', color: '#000' }}>
-                      <h4 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#000', lineHeight: 1.1 }}>{liveNews[activeNews].title}</h4>
-                      <div className="glass" style={{ display: 'inline-block', padding: '0.5rem 1rem', background: 'var(--logo-green)', color: '#fff', borderRadius: '1rem', fontWeight: 900, fontSize: '0.8rem' }}>
-                        {liveNews[activeNews].label}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Side: News Body */}
-                <div style={{ flex: 1, padding: window.innerWidth < 1024 ? '0 1rem' : '0' }}>
-                  <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.5em', fontSize: '0.9rem', textTransform: 'uppercase', display: 'block', marginBottom: '2rem' }}>
-                    {liveNews[activeNews].label}
-                  </span>
-                  <h2 style={{ fontSize: 'clamp(3rem, 5vw, 5rem)', color: 'var(--text-main)', marginBottom: '3rem', lineHeight: 1 }}>
-                    {liveNews[activeNews].title.includes(':') ? (
-                      <>
-                        <span style={{ fontSize: '0.6em', opacity: 0.7, display: 'block', marginBottom: '0.5rem' }}>{liveNews[activeNews].title.split(':')[0]}</span>
-                        <span style={{ color: 'var(--logo-green)' }}>{liveNews[activeNews].title.split(':')[1].trim()}</span>
-                      </>
-                    ) : (
-                      liveNews[activeNews].title
-                    )}
-                  </h2>
-                  <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '3rem', fontWeight: 500, margin: window.innerWidth < 1024 ? '0 auto 3rem' : '0 0 3rem' }}>
-                    {liveNews[activeNews].body}
-                  </p>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '4rem' }}>
-                    {liveNews[activeNews].stats.map((item, i) => (
-                      <div key={i}>
-                        <p style={{ color: 'var(--logo-green)', fontWeight: 900, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: '0.8rem' }}>{item.label}</p>
-                        <p style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>{item.text}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', justifyContent: window.innerWidth < 1024 ? 'center' : 'flex-start' }}>
-                    <button className="btn-cartoon" onClick={() => window.open(liveNews[activeNews].link, '_blank')}>Leer Noticia Completa</button>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                      {liveNews.map((_, i) => (
-                        <div 
-                          key={i} 
-                          onClick={() => setActiveNews(i)}
-                          style={{ 
-                            width: i === activeNews ? '40px' : '12px', 
-                            height: '12px', 
-                            borderRadius: '10px', 
-                            background: i === activeNews ? 'var(--logo-green)' : 'rgba(255,255,255,0.2)', 
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease'
-                          }} 
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </section>
-
-        {/* Section 3. GALLERY */}
-        <section id="gallery" style={{ padding: 'var(--section-padding) 0', position: 'relative' }}>
-          <div className="section-container">
-            <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-              <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.5em', fontSize: '0.8rem', textTransform: 'uppercase', display: 'block', marginBottom: '1.5rem' }}>Experiencia Ranas</span>
-              <h2 style={{ fontSize: 'clamp(2.5rem, 6vw, 6rem)', color: 'var(--text-main)', marginBottom: '1.5rem' }}>Galería de <span style={{ color: 'var(--logo-green)' }}>Acción.</span></h2>
-              <p className="mobile-hide" style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', fontWeight: 500 }}>Capturando los mejores momentos en el tatami, desde competencias internacionales hasta el día a día en el dojo.</p>
-            </div>
-
-            <div className="mobile-horizontal-slider" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gridAutoRows: '300px', gap: '1.5rem' }}>
-              {liveGallery.map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="mobile-slide"
-                  style={{
-                    gridColumn: item.size === 'large' ? 'span 2' : item.size === 'wide' ? 'span 2' : 'span 1',
-                    gridRow: item.size === 'large' ? 'span 2' : item.size === 'tall' ? 'span 2' : 'span 1',
-                    borderRadius: '2rem',
-                    overflow: 'hidden',
-                    background: 'var(--panel-card)',
-                    border: '1px solid var(--panel-border)',
-                    cursor: 'pointer',
-                    position: 'relative'
-                  }}
-                >
-                  <img src={item.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Gallery" />
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)', opacity: 0, transition: 'opacity 0.3s' }} onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')} onMouseLeave={(e) => (e.currentTarget.style.opacity = '0')}>
-                    <div style={{ position: 'absolute', bottom: '2rem', left: '2rem' }}>
-                      <ImageIcon size={24} color="#fff" />
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Section 4. CONTACT/JOIN CALL TO ACTION */}
-        <section id="contact" className="section-alt" style={{ padding: 'var(--section-padding) 0', position: 'relative' }}>
-          <div className="section-container">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="responsive-stack glass"
-              style={{
-                borderRadius: '4rem',
-                overflow: 'hidden',
-                background: 'var(--panel-card)',
-                border: '1px solid var(--panel-border)',
-                minHeight: '400px',
-                boxShadow: '0 40px 100px -20px rgba(0,0,0,0.1)'
-              }}
-            >
-              {/* Image Side */}
-              <div style={{ position: 'relative', overflow: 'hidden' }}>
-                <img 
-                  src="/assets/contact_section.jpeg" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  alt="Unete al Poder Anfibio" 
-                />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, transparent, var(--panel-card))', opacity: 0.1 }}></div>
-              </div>
-
-              <div style={{ padding: window.innerWidth < 1024 ? '2rem' : '4rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <span className="mobile-center" style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block' }}>Únete a Nosotros</span>
-                <h2 className="mobile-center" style={{ fontSize: 'clamp(2.5rem, 4vw, 3.5rem)', lineHeight: 1.1, marginBottom: '2rem', color: 'var(--text-main)', letterSpacing: '-1px' }}>
-                  ¿Quieres sumarte al <span style={{ color: 'var(--logo-green)' }}>poder anfibio?</span>
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <p style={{ fontSize: 'clamp(1.1rem, 2vw, 1.4rem)', color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.5 }}>
-                    Forma parte de la comunidad de Jiu Jitsu más fuerte de Concepción. No importa tu nivel, solo tu determinación.
-                  </p>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginTop: '1rem' }}>
-                    <a 
-                      href="mailto:ranasjiujitsu@gmail.com" 
-                      className="btn-primary hover-lift" 
-                      style={{ 
-                        padding: '1.5rem 2.5rem', 
-                        fontSize: '1rem', 
-                        background: 'var(--logo-green)', 
-                        textDecoration: 'none', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        gap: '0.8rem',
-                        fontWeight: 900,
-                        borderRadius: '1.5rem',
-                        color: '#fff',
-                        boxShadow: '0 20px 40px rgba(5,168,106,0.2)'
-                      }}
-                    >
-                      <Mail size={24} /> CONTACTO
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-
-        <footer style={{ background: '#000', padding: 'var(--section-padding) 0 4rem', borderTop: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}>
-          <div className="section-container">
-            <div className="responsive-stack" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '4rem', marginBottom: '6rem' }}>
-              <div className="mobile-center">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem', justifyContent: 'inherit' }}>
-                  <div style={{ padding: '3px', background: '#fff', borderRadius: '50%', display: 'flex' }}>
-                    <img src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg" alt="Logo" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
-                  </div>
-                  <span style={{ fontWeight: 900, fontSize: '1.6rem', letterSpacing: '-1px', color: '#fff' }}>RANAS <span style={{ color: 'var(--logo-green)' }}>JIU JITSU</span></span>
-                </div>
-                <p className="mobile-hide" style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, fontSize: '1rem', maxWidth: '400px', fontWeight: 500 }}>
-                  El epicentro del Jiu Jitsu de alto nivel en Concepción. Orompello 1421. Maestría técnica y comunidad.
-                </p>
-              </div>
-              <div className="mobile-center">
-                <h4 style={{ fontSize: '1rem', marginBottom: '1.5rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.05em' }}>COMUNIDAD</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <span className="footer-link">Nosotros</span>
-                  <span className="footer-link">Horarios</span>
-                  <span className="footer-link">Membresías</span>
-                </div>
-              </div>
-              <div className="mobile-center">
-                <h4 style={{ fontSize: '1rem', marginBottom: '1.5rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.05em' }}>CONTACTO</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <span>+56 9 3960 1560</span>
-                  <span>manuelplazaarenas@gmail.com</span>
-                  <span>Orompello 1421, Concepción</span>
-                </div>
-              </div>
-              <div className="mobile-center">
-                <h4 style={{ fontSize: '1rem', marginBottom: '1.5rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.05em' }}>SÍGUENOS</h4>
-                <div style={{ display: 'flex', gap: '1.5rem', color: 'var(--logo-green)', justifyContent: 'inherit' }}>
-                  <Instagram size={24} className="hover-lift" style={{ cursor: 'pointer' }} />
-                  <Facebook size={24} className="hover-lift" style={{ cursor: 'pointer' }} />
-                </div>
-              </div>
-              <div className="mobile-center">
-                <h4 style={{ fontSize: '1rem', marginBottom: '1.5rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.05em' }}>LEGAL</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <span className="footer-link" onClick={() => setShowTermsModal(true)} style={{ cursor: 'pointer' }}>Términos y Condiciones</span>
-                  <span className="footer-link" onClick={() => setShowPrivacyModal(true)} style={{ cursor: 'pointer' }}>Políticas de Privacidad</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ paddingTop: '3rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.1em' }}>
-              © 2026 RANAS JIU JITSU • CONCEPCIÓN CHILE
-            </div>
-          </div>
-        </footer>
-
-        {/* Terms and Conditions Modal */}
-        <AnimatePresence>
-          {showTermsModal && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }} onClick={() => setShowTermsModal(false)}>
-              <motion.div initial={{ scale: 0.9, y: 50, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 50, opacity: 0 }} style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: isMobile ? '1.5rem' : '2rem', padding: isMobile ? '2rem 1.5rem' : '3rem 2.5rem', width: '100%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto', color: '#fff', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-                <button onClick={() => setShowTermsModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
-                <h3 style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: 900, marginBottom: '1.5rem', color: 'var(--logo-green)' }}>Términos y Condiciones</h3>
-                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.95rem', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <p><strong>1. Aceptación de los términos</strong><br/>Al descargar, instalar o utilizar la aplicación Ranas Jiu Jitsu (la "Aplicación"), aceptas quedar vinculado por estos Términos y Condiciones. Si no estás de acuerdo, no utilices la Aplicación.</p>
-                  <p><strong>2. Uso de la Aplicación</strong><br/>La Aplicación está destinada exclusivamente a los alumnos y miembros administrativos de la academia Ranas Jiu Jitsu para la gestión de clases, visualización de progreso y pagos de mensualidad.</p>
-                  <p><strong>3. Membresías y Pagos</strong><br/>Los pagos de las mensualidades son procesados por proveedores externos seguros (Mercado Pago u otros). La academia no almacena datos de tarjetas de crédito. No se emitirán reembolsos por clases no asistidas o inactividad del alumno.</p>
-                  <p><strong>4. Conducta del Usuario</strong><br/>Te comprometes a utilizar la Aplicación con respeto y responsabilidad. Cualquier mal uso del sistema para alterar asistencias, falsear pagos o realizar actos fraudulentos resultará en la suspensión inmediata de la cuenta y cancelación de la membresía en la academia.</p>
-                  <p><strong>5. Cancelación de Membresía</strong><br/>Puedes solicitar la cancelación de tu suscripción o eliminación de tu cuenta en cualquier momento poniéndote en contacto con la administración del Dojo de manera presencial o al correo de contacto.</p>
-                  <p><strong>6. Modificaciones</strong><br/>Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor de manera inmediata al ser publicados en la Aplicación.</p>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* iOS Standalone Bookmark Blocker */}
-        {isIOSStandalone && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center', color: '#fff' }}>
-            <img src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg" alt="Logo" style={{ width: 90, height: 90, borderRadius: '50%', border: '3px solid #05a86a', marginBottom: '1.5rem', boxShadow: '0 0 30px rgba(5,168,106,0.3)' }} />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '0.8rem', color: '#fff', letterSpacing: '-0.5px' }}>Acceso desde Marcador no compatible</h2>
-            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem', lineHeight: 1.6, maxWidth: '380px', marginBottom: '2rem', fontWeight: 500 }}>
-              Estás ingresando desde un marcador antiguo guardado en tu iPhone. Para garantizar el correcto funcionamiento de tus pagos y la navegación, abre Ranas Jiu Jitsu directamente en tu navegador Safari.
-            </p>
-            <a 
-              href="https://ranasjiujitsu.cl" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              style={{ background: '#05a86a', color: '#fff', padding: '1rem 2rem', borderRadius: '50px', fontWeight: 900, textDecoration: 'none', fontSize: '0.95rem', boxShadow: '0 10px 25px rgba(5,168,106,0.4)', marginBottom: '1.5rem', display: 'inline-block' }}>
-              🌐 ABRIR EN NAVEGADOR SAFARI
-            </a>
-            <a 
-              href="https://play.google.com/store/apps/details?id=cl.ranasjiujitsu.ranapp"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none' }}>
-              🤖 O descarga Ranapp para Android
-            </a>
-          </div>
-        )}
-
-        {/* Privacy Policy Modal */}
-        <AnimatePresence>
-          {showPrivacyModal && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }} onClick={() => setShowPrivacyModal(false)}>
-              <motion.div initial={{ scale: 0.9, y: 50, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 50, opacity: 0 }} style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: isMobile ? '1.5rem' : '2rem', padding: isMobile ? '2rem 1.5rem' : '3rem 2.5rem', width: '100%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto', color: '#fff', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-                <button onClick={() => setShowPrivacyModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
-                <h3 style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: 900, marginBottom: '1.5rem', color: 'var(--logo-green)' }}>Políticas de Privacidad</h3>
-                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.95rem', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <p><strong>1. Información que recopilamos</strong><br/>Al registrarte en el Dojo, recopilamos información personal básica necesaria para el funcionamiento de la academia, la cual incluye: nombre completo, correo electrónico, número de teléfono, fecha de nacimiento y documento de identidad. También recopilamos tu foto de perfil si decides subir una.</p>
-                  <p><strong>2. Uso de tu información</strong><br/>Utilizamos tus datos estrictamente para proporcionarte los servicios de la academia, administrar tu suscripción, llevar registro de tu grado (cinturón) y clases asistidas, así como enviarte comunicaciones importantes (recordatorios de pago o noticias del dojo).</p>
-                  <p><strong>3. Protección y Seguridad</strong><br/>Tu información personal se encuentra alojada en bases de datos seguras (Supabase) y no será vendida, arrendada o compartida con terceros para fines comerciales o de marketing ajenos a Ranas Jiu Jitsu.</p>
-                  <p><strong>4. Eliminación de datos de usuario</strong><br/>Como usuario, tienes el derecho de solicitar la eliminación total de tus datos personales e historial en cualquier momento. Para ejercer este derecho, comunícate directamente con la administración del Dojo o envía un correo electrónico. Una vez solicitada, la cuenta y sus datos asociados serán eliminados de nuestras bases de manera irreversible.</p>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Ranapp Phone Modal */}
-        <AnimatePresence>
-          {showRanappModal && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(15px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setShowRanappModal(false)}>
-              <motion.div initial={{ scale: 0.9, y: 50, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 50, opacity: 0 }} style={{ position: 'relative', width: '320px', height: '650px', maxHeight: 'min(650px, 90vh)', background: '#0a0a0a', borderRadius: '40px', border: '8px solid #1f2937', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-                {/* Close Button on Phone Mockup */}
-                <button onClick={() => setShowRanappModal(false)} style={{ position: 'absolute', top: '1.2rem', right: '1.2rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20 }}><X size={14} /></button>
-
-                {/* Phone Notch */}
-                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: '120px', height: '25px', background: '#1f2937', borderBottomLeftRadius: '15px', borderBottomRightRadius: '15px', zIndex: 10 }}></div>
-                
-                {/* App Content */}
-                <div style={{ padding: '3rem 1.5rem 1.5rem', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', overflowY: 'auto' }}>
-                  <div style={{ position: 'absolute', top: '10%', left: '50%', transform: 'translate(-50%, -50%)', width: '150px', height: '150px', background: 'var(--logo-green)', filter: 'blur(60px)', opacity: 0.3, borderRadius: '50%', zIndex: 0 }}></div>
-                  <img src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg" alt="Ranapp Logo" style={{ width: '80px', height: '80px', borderRadius: '50%', border: '2px solid var(--logo-green)', marginBottom: '1.5rem', position: 'relative', zIndex: 1 }} />
-                  
-                  <h3 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1px', textAlign: 'center', lineHeight: 1.1, marginBottom: '0.5rem', position: 'relative', zIndex: 1 }}>RANAPP</h3>
-                  <span style={{ color: 'var(--logo-green)', fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '1rem', position: 'relative', zIndex: 1 }}>Aplicación Oficial</span>
-                  
-                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', textAlign: 'center', lineHeight: 1.5, marginBottom: '1.2rem', position: 'relative', zIndex: 1, fontWeight: 500 }}>
-                    La experiencia de tu dojo directamente en tu bolsillo. Exclusivo para alumnos.
-                  </p>
-
-                  {/* Android Play Store Link */}
-                  <a 
-                    href="https://play.google.com/store/apps/details?id=cl.ranasjiujitsu.ranapp"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ 
-                      width: '100%', 
-                      padding: '0.8rem 1rem', 
-                      background: 'linear-gradient(135deg, #05a86a 0%, #038050 100%)', 
-                      borderRadius: '12px', 
-                      color: '#fff', 
-                      fontWeight: 900, 
-                      fontSize: '0.85rem',
-                      textDecoration: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.5rem',
-                      marginBottom: '0.8rem',
-                      boxShadow: '0 4px 15px rgba(5, 168, 106, 0.3)',
-                      position: 'relative',
-                      zIndex: 10
-                    }}
-                  >
-                    <span>🤖</span> DESCARGAR EN GOOGLE PLAY
-                  </a>
-
-                  {/* PWA Install Button if browser supports beforeinstallprompt */}
-                  {deferredPrompt && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleInstallApp();
-                      }}
-                      style={{ 
-                        width: '100%', 
-                        padding: '0.7rem', 
-                        background: 'rgba(255,255,255,0.1)', 
-                        border: '1px solid rgba(255,255,255,0.2)', 
-                        borderRadius: '12px', 
-                        color: '#fff', 
-                        fontWeight: 800, 
-                        fontSize: '0.8rem',
-                        cursor: 'pointer', 
-                        marginBottom: '0.8rem',
-                        position: 'relative',
-                        zIndex: 10
-                      }}
-                    >
-                      Instalar en este navegador (PWA)
-                    </button>
-                  )}
-
-                  {/* iOS App Store Notice (No bookmarks) */}
-                  <div style={{ 
-                    background: 'rgba(255,255,255,0.06)', 
-                    border: '1px solid rgba(255,255,255,0.12)', 
-                    borderRadius: '12px', 
-                    padding: '0.8rem', 
-                    textAlign: 'center', 
-                    width: '100%', 
-                    marginBottom: '1.2rem',
-                    position: 'relative',
-                    zIndex: 1
-                  }}>
-                    <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                      🍎 App Store (iOS)
-                    </span>
-                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem', margin: '0.3rem 0 0', fontWeight: 600 }}>
-                      Próximamente disponible en App Store
-                    </p>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', position: 'relative', zIndex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <Calendar size={20} color="var(--logo-green)" />
-                      <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Revisa tus horarios y clases</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <Play size={20} color="var(--logo-green)" />
-                      <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Ve contenido exclusivo</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <DollarSign size={20} color="var(--logo-green)" />
-                      <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Paga tu mensualidad fácil</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Home indicator */}
-                <div style={{ width: '100%', padding: '1rem', display: 'flex', justifyContent: 'center', background: '#0a0a0a' }}>
-                  <div style={{ width: '40%', height: '5px', background: 'rgba(255,255,255,0.3)', borderRadius: '10px' }}></div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    );
+    return <ProductLanding onEnter={() => setViewMode('auth')} apiUrl={API_URL} />;
   }
 
   // --- RENDERING AUTH PAGE ---
@@ -2379,16 +1663,16 @@ const App: React.FC = () => {
           }}
         >
           <div style={{ position: 'relative', display: 'inline-flex', marginBottom: window.innerWidth < 1024 ? '0' : '2.5rem' }}>
-            <img src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg" alt="Logo" style={{ width: window.innerWidth < 1024 ? '120px' : '100px', height: window.innerWidth < 1024 ? '120px' : '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--logo-green)' }} />
+            <img src={BRAND.logoMark} alt="DP Sistemas" style={{ width: window.innerWidth < 1024 ? '132px' : '112px', height: window.innerWidth < 1024 ? '124px' : '106px', objectFit: 'contain', display: 'block' }} />
           </div>
           <div className="desktop-only" style={{ width: '100%', textAlign: 'inherit', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block', marginTop: '2.5rem' }}>Portal de Miembros</span>
+            <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block', marginTop: '2.5rem' }}>DP Sistemas y Automatizaciones</span>
             <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', color: '#fff', marginBottom: '2rem', lineHeight: 1, letterSpacing: '-2px' }}>
-              Tu dojo,<br />
-              <span style={{ color: 'var(--logo-green)' }}>tu legado.</span>
+              Entra a la<br />
+              <span style={{ color: 'var(--logo-green)' }}>demo.</span>
             </h1>
             <p style={{ fontSize: '1.1rem', color: 'rgba(255,255,255,0.6)', maxWidth: '400px', lineHeight: 1.6, fontWeight: 500 }}>
-              Inicia sesión para acceder a tu plan de entrenamiento, clases registradas y contenido técnico exclusivo de Ranas Jiu Jitsu.
+              Acceso habilitado por 24 horas a un correo específico, después de la reunión.
             </p>
           </div>
         </motion.div>
@@ -2537,7 +1821,7 @@ const App: React.FC = () => {
                           onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(5, 168, 106, 0.1)'}
                           onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                         >
-                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--logo-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: '2px solid #fff', boxShadow: '0 0 20px rgba(5,168,106,0.3)' }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--logo-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: '2px solid #fff', boxShadow: '0 0 20px rgba(22,196,122,0.3)' }}>
                             {opt.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
@@ -2675,12 +1959,17 @@ const App: React.FC = () => {
           <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ position: 'relative', width: '52px', height: '52px' }}>
-                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(var(--logo-green) 0%, transparent 60%, var(--logo-green) 100%)' }} />
-                <div className="strict-avatar-container" style={{ position: 'absolute', inset: '2px', width: '48px', height: '48px', background: '#111' }}>
-                  <img src={currentUser.avatar ? (currentUser.avatar.startsWith('http') || currentUser.avatar.startsWith('data:') ? currentUser.avatar : `${API_URL}${currentUser.avatar}`) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUser.name)}&backgroundColor=05a86a&fontFamily=Arial,sans-serif&fontWeight=900&fontSize=40`} />
-                </div>
-              </div>
+              <button
+                type="button"
+                className="dp-avatar-btn"
+                style={{ width: '52px', height: '52px' }}
+                onClick={() => {
+                  setPhotoLightboxStudent(currentUser);
+                }}
+                aria-label="Ver foto de perfil"
+              >
+                <img src={studentPhoto(currentUser)} alt="" />
+              </button>
               <div>
                 <div style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.3em', textTransform: 'uppercase' }}>Bienvenido</div>
                 <div style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.5px', marginBottom: '4px' }}>{currentUser?.name?.split(' ')[0]}</div>
@@ -2695,7 +1984,7 @@ const App: React.FC = () => {
           </motion.header>
 
           {/* Main Views */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {activeTab === 'dashboard' && (
               <motion.div key="dashboard" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
                 {noticeData.subject && !isNoticeDismissed && (
@@ -2705,11 +1994,11 @@ const App: React.FC = () => {
                     exit={{ opacity: 0, y: -15 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                     style={{ 
-                      background: 'linear-gradient(135deg, rgba(167,139,250,0.12) 0%, rgba(139,92,246,0.18) 100%)', 
+                      background: 'linear-gradient(135deg, rgba(0,105,112,0.1) 0%, rgba(26,163,171,0.14) 100%)', 
                       backdropFilter: 'blur(12px)',
                       WebkitBackdropFilter: 'blur(12px)',
-                      border: '1.5px solid rgba(167,139,250,0.35)', 
-                      boxShadow: '0 12px 28px -8px rgba(139,92,246,0.25), 0 0 15px rgba(167,139,250,0.15)',
+                      border: '1.5px solid rgba(0,105,112,0.28)', 
+                      boxShadow: '0 12px 28px -8px rgba(0,105,112,0.18)',
                       padding: '1.1rem 1.4rem', 
                       borderRadius: '1.4rem', 
                       marginBottom: '1.8rem', 
@@ -2722,15 +2011,15 @@ const App: React.FC = () => {
                     }}
                   >
                     {/* Glowing ambient background */}
-                    <div style={{ position: 'absolute', top: '-40px', left: '-20px', width: '120px', height: '120px', background: '#a78bfa', filter: 'blur(45px)', opacity: 0.25, pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', top: '-40px', left: '-20px', width: '120px', height: '120px', background: '#006970', filter: 'blur(45px)', opacity: 0.18, pointerEvents: 'none' }} />
 
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
                       <div style={{ 
-                        background: 'linear-gradient(135deg, #a78bfa, #7c3aed)', 
+                        background: 'linear-gradient(135deg, #006970, #1aa3ab)', 
                         padding: '0.7rem', 
                         borderRadius: '14px', 
                         color: '#fff',
-                        boxShadow: '0 4px 14px rgba(124,58,237,0.4)',
+                        boxShadow: '0 4px 14px rgba(0,105,112,0.35)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -2740,8 +2029,8 @@ const App: React.FC = () => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                            📢 AVISO OFICIAL
+                          <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#006970', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                            Aviso de la academia
                           </span>
                         </div>
                         <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 900, color: 'var(--text-main)', lineHeight: 1.3 }}>
@@ -2750,7 +2039,7 @@ const App: React.FC = () => {
                         <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.45, wordBreak: 'break-word' }}>
                           {(noticeData.message ?? '').split(/(\*\*.*?\*\*)/g).map((part: string, index: number) => 
                             part.startsWith('**') && part.endsWith('**') ? 
-                              <strong key={index} style={{ color: '#a78bfa', fontWeight: 900 }}>{part.slice(2, -2)}</strong> : 
+                              <strong key={index} style={{ color: '#006970', fontWeight: 800 }}>{part.slice(2, -2)}</strong> : 
                               part
                           )}
                         </p>
@@ -2848,7 +2137,10 @@ const App: React.FC = () => {
                         {shouldShowIndividualPayment && (
                           <motion.div 
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => !currentUser?.isPaid && openPaymentModal(currentUser!)}
+                            onClick={() => {
+                              if (currentUser?.isPaid) return;
+                              openPaymentModal(currentUser!);
+                            }}
                             style={{ 
                               background: currentUser?.isPaid ? 'var(--panel-green-bg)' : 'var(--panel-red-bg)', 
                               border: `1px solid ${currentUser?.isPaid ? 'var(--panel-green-border)' : 'var(--panel-red-border)'}`, 
@@ -2859,9 +2151,13 @@ const App: React.FC = () => {
                               position: 'relative'
                             }}>
                             <CreditCard size={22} style={{ color: currentUser?.isPaid ? 'var(--logo-green)' : '#ef4444', marginBottom: '0.6rem' }} />
-                            <div style={{ fontSize: '0.6rem', color: 'var(--panel-muted)', fontWeight: 800, letterSpacing: '0.1em', marginBottom: '0.2rem' }}>MENSUALIDAD INDIVIDUAL</div>
-                            <div style={{ fontWeight: 900, color: currentUser?.isPaid ? 'var(--logo-green)' : '#ef4444', fontSize: '0.85rem' }}>{currentUser?.isPaid ? '✓ AL DÍA' : '⚠ PENDIENTE'}</div>
-                            {!currentUser?.isPaid && <div style={{ fontSize: '0.55rem', color: '#ef4444', fontWeight: 800, marginTop: '4px' }}>TOCA PARA PAGAR</div>}
+                            <div style={{ fontSize: '0.6rem', color: 'var(--panel-muted)', fontWeight: 800, letterSpacing: '0.1em', marginBottom: '0.2rem' }}>MENSUALIDAD {new Date().toLocaleDateString('es-CL', { month: 'long' }).toUpperCase()}</div>
+                            <div style={{ fontWeight: 900, color: currentUser?.isPaid ? 'var(--logo-green)' : '#ef4444', fontSize: '0.85rem' }}>{currentUser?.isPaid ? 'Al día' : 'Pendiente'}</div>
+                            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-text)', marginTop: '4px' }}>{formatCLP(currentUser?.monthlyFee || 0)}</div>
+                            <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--panel-muted)', marginTop: '4px' }}>
+                              {planLabel(currentUser?.plan)}{planWeeklyMax(currentUser?.plan) < 99 ? ` · ${planWeeklyMax(currentUser?.plan)} por semana` : ''}
+                            </div>
+                            {!currentUser?.isPaid && <div style={{ fontSize: '0.55rem', color: '#ef4444', fontWeight: 800, marginTop: '4px' }}>PAGAR MENSUALIDAD</div>}
                           </motion.div>
                         )}
                   <div style={{ background: 'var(--panel-purple-bg)', border: '1px solid var(--panel-purple-border)', borderRadius: '1.1rem', padding: '1.3rem', textAlign: 'center' }}>
@@ -2870,15 +2166,14 @@ const App: React.FC = () => {
                     {(() => {
                       const cWeekStart = getWeekStart(new Date());
                       const booked = (currentUser?.scheduledClasses || []).filter(c => c.timestamp >= cWeekStart);
-                      let planMax = 2;
-                      if (currentUser?.plan?.toLowerCase().includes('ilimitado')) planMax = 99;
-                      else if (currentUser?.plan) {
-                        const match = currentUser.plan.match(/^(\d+)/);
-                        planMax = match ? parseInt(match[1]) : 2;
-                      }
+                      const planBooked = booked.filter(c => !isOpenMat(c.name));
+                      const planMax = planWeeklyMax(currentUser?.plan);
 
+                      if (planBooked.length >= planMax && planMax < 99) {
+                        return <div style={{ fontWeight: 900, fontSize: '0.8rem', color: '#b91c1c' }}>Límite semanal alcanzado<br /><span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--panel-muted)' }}>{planBooked.length} de {planMax} · Open Mat sigue libre</span></div>;
+                      }
                       if (booked.length > 0) {
-                        return <div style={{ fontWeight: 900, fontSize: '0.95rem' }}>{booked.length} de {planMax} <span style={{ fontSize: '0.7rem', color: 'var(--panel-muted)' }}>esta semana</span></div>;
+                        return <div style={{ fontWeight: 900, fontSize: '0.95rem' }}>{planBooked.length} de {planMax} <span style={{ fontSize: '0.7rem', color: 'var(--panel-muted)' }}>esta semana</span></div>;
                       } else {
                         return <div style={{ fontWeight: 800, fontSize: '0.65rem', color: 'var(--panel-muted)', lineHeight: 1.4 }}>Selecciona en tu horario<br /><span style={{ color: 'var(--logo-green)' }}>un día esta semana 👇</span></div>;
                       }
@@ -2897,23 +2192,42 @@ const App: React.FC = () => {
                    </div>
 
                    <div style={{ display: 'flex', overflowX: 'auto', gap: '0.8rem', paddingBottom: '1rem', margin: '0 -1.5rem', padding: '0 1.5rem', WebkitOverflowScrolling: 'touch' }} className="no-scrollbar">
-                     {(calculateAge(currentUser?.birthDate || null) < 18 ? KIDS_SCHEDULE : ADULT_SCHEDULE).map((dayItem: any, idx: number) => (
-                       <div key={idx} style={{ flexShrink: 0, width: '140px', background: 'var(--panel-card)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                     {(groupByDay(
+                       classSlots.filter((s) => {
+                         const sede = Number(currentUser?.sedeId || currentUser?.sede_id);
+                         return !sede || Number(s.sedeId) === sede;
+                       }),
+                       calculateAge(currentUser?.birthDate || null) < 18 ? 'KIDS' : 'ADULTS'
+                     )).map((dayItem: any, idx: number) => (
+                       <div key={idx} style={{ flexShrink: 0, width: '168px', background: 'var(--panel-card)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                          <div style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{dayItem.day}</div>
                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                            {dayItem.classes.map((cls: any, cIdx: number) => {
                              const cWeekStart = getWeekStart(new Date());
                              const isBooked = (currentUser?.scheduledClasses || []).some((sc: any) => sc.timestamp >= cWeekStart && sc.day === dayItem.day && sc.time === cls.time);
+                             const enrolled = students.filter((st) => (st.scheduledClasses || []).some((sc) => sc.timestamp >= cWeekStart && sc.day === dayItem.day && sc.time === cls.time)).length;
+                             const cap = cls.capacity as number | null;
+                             const isFull = !!(cap && cap > 0 && enrolled >= cap);
+                             const openMat = isOpenMat(cls.name);
+                             const planMax = planWeeklyMax(currentUser?.plan);
+                             const planUsed = (currentUser?.scheduledClasses || []).filter((sc) => sc.timestamp >= cWeekStart && !isOpenMat(sc.name)).length;
+                             const planLocked = !isBooked && !openMat && planUsed >= planMax && planMax < 99;
+                             const remaining = cap && cap > 0 ? Math.max(0, cap - enrolled) : null;
+                             const blocked = !isBooked && (isFull || planLocked);
 
                              return (
-                               <motion.button key={cIdx} whileTap={{ scale: 0.95 }}
+                               <motion.button key={cIdx} whileTap={{ scale: blocked ? 1 : 0.95 }}
                                  onClick={() => handleBookClass(dayItem.day, cls.time, cls.name)}
                                  style={{
-                                   background: isBooked ? 'var(--logo-green)' : 'var(--panel-surface)',
-                                   borderRadius: '0.8rem', padding: '0.8rem', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%'
+                                   background: isBooked ? 'var(--logo-green)' : isFull ? 'rgba(239,68,68,0.08)' : 'var(--panel-surface)',
+                                   borderRadius: '0.8rem', padding: '0.8rem', border: isFull && !isBooked ? '1px solid rgba(239,68,68,0.25)' : 'none',
+                                   cursor: blocked ? 'not-allowed' : 'pointer', textAlign: 'left', width: '100%', opacity: planLocked ? 0.7 : 1
                                  }}>
-                                 <div style={{ fontSize: '1rem', fontWeight: 900, color: isBooked ? '#000' : 'var(--panel-text)', marginBottom: '2px' }}>{cls.time}</div>
+                                 <div style={{ fontSize: '0.95rem', fontWeight: 900, color: isBooked ? '#000' : 'var(--panel-text)', marginBottom: '2px' }}>{cls.time}{cls.endTime ? `–${cls.endTime}` : ''}</div>
                                  <div style={{ fontSize: '0.6rem', fontWeight: 700, color: isBooked ? 'rgba(0,0,0,0.6)' : 'var(--panel-muted)', textTransform: 'uppercase' }}>{cls.name}</div>
+                                 <div style={{ fontSize: '0.58rem', fontWeight: 800, marginTop: '0.35rem', color: isBooked ? 'rgba(0,0,0,0.55)' : isFull ? '#b91c1c' : planLocked ? '#b91c1c' : 'var(--logo-green)' }}>
+                                   {isBooked ? 'Reservada' : isFull ? `Clase completa · ${enrolled}/${cap}` : planLocked ? 'Límite semanal' : openMat || remaining == null ? 'Sin límite de cupos' : `${remaining} cupos disponibles`}
+                                 </div>
                                </motion.button>
                              );
                            })}
@@ -2924,79 +2238,51 @@ const App: React.FC = () => {
                  </motion.section>
 
                   {/* Graduaciones */}
-                  {(currentUser.lastGrade || currentUser.graduationDate) && (
+                  {(() => {
+                    const me = withProgress(currentUser);
+                    const hist = me.progress?.history || [];
+                    return (
                     <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
                       style={{ marginBottom: '1.5rem' }}>
-                      <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(5,168,106,0.06) 0%, rgba(16,244,156,0.06) 100%)', borderRadius: '1.2rem', border: '1px solid rgba(5,168,106,0.2)' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.1em', marginBottom: '1rem', textTransform: 'uppercase' }}>🥋 Graduaciones</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                          {currentUser.lastGrade && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem 1rem', background: 'var(--panel-surface)', borderRadius: '0.8rem', border: '1px solid var(--panel-border)' }}>
+                      <div style={{ padding: '1.5rem', background: 'var(--panel-card)', borderRadius: '1.2rem', border: '1px solid var(--panel-border)' }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.1em', marginBottom: '0.4rem', textTransform: 'uppercase' }}>Tu grado</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--panel-text)', marginBottom: '0.25rem' }}>{currentRankLabel(me.belt, me.progress?.stripes || 0)}</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--panel-muted)', marginBottom: '1.1rem' }}>
+                          {me.joinDate ? `Ingreso ${formatDate(me.joinDate, 'short')}` : 'Sin fecha de ingreso'}
+                          {me.progress?.evaluationDate ? ` · Evaluación ${formatShortDate(me.progress.evaluationDate)}` : ''}
+                        </div>
+                        <BeltPath student={me} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', marginTop: '1.15rem' }}>
+                          {hist.map((ev, i) => (
+                            <div key={ev.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 0.9rem', background: 'var(--panel-surface)', borderRadius: '0.8rem', border: '1px solid var(--panel-border)' }}>
                               <div>
-                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--logo-green)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.2rem' }}>Último grado</div>
-                                <div style={{ fontWeight: 900, fontSize: '0.95rem', color: 'var(--panel-text)' }}>{currentUser.lastGrade}</div>
+                                <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>{ev.label}</div>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--panel-muted)' }}>{formatDate(ev.date, 'short')}</div>
                               </div>
-                              {currentUser.graduationDate && (
-                                <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--panel-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.2rem' }}>Fecha</div>
-                                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--logo-green)' }}>
-                                    {formatDate(currentUser.graduationDate, 'short')}
-                                  </div>
-                                </div>
-                              )}
+                              <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--logo-green)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '0.7rem', fontWeight: 900 }}>✓</div>
                             </div>
-                          )}
+                          ))}
                         </div>
                       </div>
                     </motion.section>
-                  )}
+                    );
+                  })()}
 
-                {/* Library Highlights */}
-                <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-                  style={{ marginBottom: '6rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', padding: '0 0.5rem' }}>
-                    <h3 style={{ fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Award size={18} style={{ color: 'var(--logo-green)' }} /> Para tu grado</h3>
-                    <button style={{ background: 'none', border: 'none', color: 'var(--logo-green)', fontWeight: 800, fontSize: '0.7rem' }}>Ver todo</button>
-                  </div>
+                <OpenEventsCard apiUrl={API_URL} />
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                    {videos.length > 0 ? (
-                      videos.slice(0, 5).map(video => (
-                        <motion.div key={video.id} whileTap={{ scale: 0.98 }} onClick={() => setPlayingVideo(video)}
-                          style={{ background: 'var(--panel-card)', borderRadius: '1.2rem', padding: '1rem', display: 'flex', gap: '1.2rem', alignItems: 'center', border: '1px solid var(--panel-border)', cursor: 'pointer' }}>
-                          <div style={{ width: '100px', height: '70px', borderRadius: '12px', overflow: 'hidden', background: '#000', position: 'relative', flexShrink: 0 }}>
-                            <img 
-                              src={video.thumbnail || 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800'} 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} 
-                              onError={(e) => {
-                                const id = getYouTubeID(video.url);
-                                if (id && !e.currentTarget.src.includes('hqdefault.jpg')) {
-                                  e.currentTarget.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
-                                } else {
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800';
-                                }
-                              }}
-                            />
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <Play size={18} fill="#fff" color="#fff" />
-                            </div>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--logo-green)', textTransform: 'uppercase', marginBottom: '0.2rem', letterSpacing: '0.1em' }}>{video.category}</div>
-                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 900, color: 'var(--panel-text)', marginBottom: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h4>
-                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--panel-muted)', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.3 }}>{video.description}</p>
-                          </div>
-                          <ChevronRight size={14} style={{ opacity: 0.25, flexShrink: 0 }} />
-                        </motion.div>
-                      ))
-                    ) : (
-                      <div style={{ padding: '2rem', textAlign: 'center', background: 'var(--panel-card)', borderRadius: '1.1rem', border: '1px dashed var(--panel-border)' }}>
-                        <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🥋</div>
-                        <p style={{ color: 'var(--panel-muted)', fontSize: '0.8rem' }}>Próximamente contenido para tu grado.</p>
-                      </div>
-                    )}
-                  </div>
-                </motion.section>
+                <StudentLibrary
+                  apiUrl={API_URL}
+                  student={currentUser}
+                  videos={videos}
+                  onOpen={(video) => {
+                    if ((video.format || 'video') === 'document') {
+                      const href = video.url.startsWith('http') ? video.url : `${API_URL}${video.url}`;
+                      window.open(href, '_blank');
+                      return;
+                    }
+                    setPlayingVideo(video);
+                  }}
+                />
               </motion.div>
             )}
 
@@ -3012,14 +2298,17 @@ const App: React.FC = () => {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem', padding: '1rem' }}>
-                      <div style={{ position: 'relative' }}>
-                        <div className="strict-avatar-container" style={{ width: '85px', height: '85px', border: '3px solid var(--logo-green)', background: 'var(--panel-surface)' }}>
-                          <img 
-                            src={currentUser.avatar ? (currentUser.avatar.startsWith('http') || currentUser.avatar.startsWith('data:') ? currentUser.avatar : `${API_URL}${currentUser.avatar}`) : getFallbackAvatarUrl(currentUser.name)} 
-                            onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(currentUser.name); }}
-                          />
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        className="dp-avatar-btn"
+                        style={{ width: '88px', height: '88px', border: '3px solid var(--logo-green)' }}
+                        onClick={() => {
+                          setPhotoLightboxStudent(currentUser);
+                        }}
+                        aria-label="Ver foto de perfil"
+                      >
+                        <img src={studentPhoto(currentUser)} alt="" onError={(e) => { e.currentTarget.src = BRAND.mascotAvatar; }} />
+                      </button>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-muted)', letterSpacing: '0.1em' }}>TU FOTO DE PERFIL</div>
                         <motion.button 
@@ -3129,7 +2418,7 @@ const App: React.FC = () => {
                                 </span>
                               </div>
 
-                              {cat.hasGender && cat.divisionName !== 'Pendiente de peso' && cat.divisionName !== 'Por definir género' ? (
+                              {cat.ready ? (
                                 <div>
                                   <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--panel-text)', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                     <span>{cat.divisionName}</span>
@@ -3154,7 +2443,7 @@ const App: React.FC = () => {
                                     {!cat.hasGender ? 'Selecciona tu género en los campos superiores' : 'Ingresa tu peso en kg para calcular la división'}
                                   </p>
                                   <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--panel-muted)', fontWeight: 600 }}>
-                                    Determina tu categoría oficial para torneos (Galo, Pluma, Pena, Leve, Médio, etc.)
+                                    Determina tu categoría oficial para torneos (Galo, Pluma, Pena, Leve, Medio, etc.)
                                   </p>
                                 </div>
                               )}
@@ -3224,8 +2513,8 @@ const App: React.FC = () => {
           </motion.button>
 
           <motion.div whileTap={{ scale: 0.92 }} onClick={() => {
-            alert('Abre cámara para escanear asistencia. Próximamente.')
-          }} style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'linear-gradient(135deg, #05a86a, #10f49c)', color: '#000', outline: '8px solid var(--panel-sidebar)', marginTop: '-30px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(5,168,106,0.3)', cursor: 'pointer' }}>
+            setShowStudentAccess(true);
+          }} style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'linear-gradient(135deg, #006970, #1aa3ab)', color: '#fff', outline: '8px solid var(--panel-sidebar)', marginTop: '-30px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(0,105,112,0.3)', cursor: 'pointer' }}>
             <QrCode size={24} />
           </motion.div>
 
@@ -3277,7 +2566,7 @@ const App: React.FC = () => {
                             height="100%" 
                             src={`https://www.youtube-nocookie.com/embed/${id}?modestbranding=1&rel=0&iv_load_policy=3&showinfo=0&disablekb=1&controls=1&autoplay=0`}
                             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                            title="Reproductor Seguro Ranas" 
+                            title="Reproductor seguro" 
                             allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" 
                             sandbox="allow-scripts allow-same-origin allow-presentation"
                             allowFullScreen
@@ -3294,7 +2583,7 @@ const App: React.FC = () => {
                   <div>
                     <h5 style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.5rem' }}>Sobre este contenido</h5>
                     <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                      Este video es parte del material exclusivo de **Dojo Ranas**. <br />
+                      Este video es parte del material exclusivo de **Academia Demo**. <br />
                       Está prohibida su reproducción parcial o total fuera de este portal oficial.
                     </p>
                   </div>
@@ -3303,6 +2592,15 @@ const App: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {showStudentAccess && (
+          <StudentAccess
+            student={currentUser}
+            slots={classSlots}
+            apiUrl={API_URL}
+            onClose={() => setShowStudentAccess(false)}
+          />
+        )}
 
         {/* ====== DUAL PAYMENT MODAL (Student View) ====== */}
         <AnimatePresence>
@@ -3352,7 +2650,7 @@ const App: React.FC = () => {
                     
                     <div style={{ background: '#eff6ff', borderRadius: '1rem', padding: '1.2rem', border: '1px solid #bfdbfe' }}>
                       <div style={{ fontSize: '0.7rem', fontWeight: 900, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <CreditCard size={15} /> PORTAL DE PAGOS SEGURO
+                        <MpLogo height={32} />
                       </div>
                       <p style={{ fontSize: '0.8rem', color: '#1e3a5f', lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
                         Este link te permite pagar tu mensualidad utilizando <b>cualquier método de pago</b>: transferencia bancaria, tu cuenta de Mercado Pago, o tarjetas de débito/crédito.
@@ -3386,18 +2684,18 @@ const App: React.FC = () => {
                     <button 
                       onClick={() => handleCreatePaymentLink(paymentModalTarget!)}
                       disabled={isGeneratingPayment}
-                      style={{ width: '100%', padding: '1.1rem', borderRadius: '1rem', border: 'none', background: isGeneratingPayment ? '#93c5fd' : '#009ee3', color: '#fff', fontWeight: 900, fontSize: '0.95rem', cursor: isGeneratingPayment ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', boxShadow: '0 10px 25px rgba(0,158,227,0.25)', transition: 'all 0.2s', marginBottom: '1.5rem' }}>
+                      style={{ width: '100%', padding: '1.05rem 1.1rem', borderRadius: '1rem', border: 'none', background: isGeneratingPayment ? '#3d2bb3' : '#0a0080', color: '#fff', fontWeight: 900, fontSize: '0.95rem', cursor: isGeneratingPayment ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: '0 10px 25px rgba(10,0,128,0.28)', transition: 'all 0.2s', marginBottom: '1.5rem' }}>
                       {isGeneratingPayment ? (
                         <><span className="premium-spinner" style={{ width: '16px', height: '16px', borderTopColor: '#fff', borderRightColor: 'rgba(255,255,255,0.6)' }} /> Redirigiendo a portal seguro...</>
                       ) : (
-                        <><CreditCard size={20} /> IR A MERCADO PAGO</>
+                        <MpLogo variant="white" height={34} />
                       )}
                     </button>
                   </motion.div>
 
                   <p style={{ fontSize: '0.6rem', color: '#94a3b8', textAlign: 'center', marginTop: '1rem', lineHeight: 1.4 }}>
                     Pagos procesados de forma segura. Ante cualquier duda,{' '}
-                    <a href="mailto:ranasjiujitsu@gmail.com" style={{ color: '#05a86a', fontWeight: 700 }}>contáctanos</a>.
+                    <a href="mailto:contacto@dpsistemas.cl" style={{ color: '#16C47A', fontWeight: 700 }}>contáctanos</a>.
                   </p>
                 </div>
               </motion.div>
@@ -3507,12 +2805,36 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {photoLightboxStudent && (
+          <div
+            onClick={() => setPhotoLightboxStudent(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(0,0,0,0.88)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '1.5rem' }}
+          >
+            <img
+              src={studentPhoto(photoLightboxStudent)}
+              alt={photoLightboxStudent.name}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: 'min(280px, 80vw)', height: 'min(280px, 80vw)', objectFit: 'contain', background: '#fff', borderRadius: '24px', border: '3px solid #006970' }}
+            />
+            <div style={{ color: '#fff', fontWeight: 800 }}>{photoLightboxStudent.name}</div>
+          </div>
+        )}
+        <ModuleBoundary name="guia-alumno">
+        <DemoGuide
+          mode="student"
+          moduleId={activeTab}
+          onGo={(tab) => {
+            if (tab === 'access') setShowStudentAccess(true);
+            else setActiveTab(tab as any);
+          }}
+        />
+        </ModuleBoundary>
       </motion.div>
     );
   }
 
   // --- RENDERING ADMIN PANEL ---
-  const tabLabels: Record<string, string> = { dashboard: 'Resumen', students: 'Alumnos', videos: 'Biblioteca', attendance: 'Asistencia', payments: 'Finanzas', settings: 'Ajustes', website: 'Sitio Web', communications: 'Comunicaciones' };
+  const tabLabels: Record<string, string> = { dashboard: 'Resumen', schedule: 'Horarios', students: 'Alumnos', videos: 'Biblioteca', attendance: 'Asistencia', payments: 'Finanzas', grades: 'Grados', events: 'Eventos', settings: 'Ajustes', website: 'Sitio Web', communications: 'Comunicaciones' };
   return (
     <motion.div
       key="app-admin"
@@ -3540,51 +2862,42 @@ const App: React.FC = () => {
           position: 'fixed', left: 0, top: 0, bottom: 0,
           display: 'flex', flexDirection: 'column',
           zIndex: 9999,
-          background: 'rgba(6,6,6,0.98)',
-          backdropFilter: 'blur(40px)',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
-          overflow: 'hidden',  /* NO overflow en el nav completo */
+          background: '#fff',
+          borderRight: '1px solid rgba(22, 22, 22, 0.08)',
+          overflow: 'hidden',
           padding: 0
         }}
       >
         {/* ── ZONA 1: Header fijo (nunca scrollea) ── */}
-        <div style={{ flexShrink: 0, padding: '1.5rem 1.5rem 0.8rem', position: 'relative' }}>
+        <div style={{ flexShrink: 0, padding: '1.35rem 1.2rem 0.7rem', position: 'relative' }}>
           {isMobile && (
             <button
               onClick={() => setIsMobileMenuOpen(false)}
-              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', zIndex: 10 }}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', background: '#f8fafc', border: '1px solid rgba(22,22,22,0.08)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#161616', cursor: 'pointer', zIndex: 10 }}
             >
               <X size={18} />
             </button>
           )}
 
-          {/* Branding compacto */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', paddingRight: isMobile ? '2.5rem' : 0 }}>
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', inset: '-4px', background: 'var(--logo-green)', borderRadius: '50%', filter: 'blur(10px)', opacity: 0.35 }} />
-              <img
-                src="/assets/WhatsApp Image 2026-03-04 at 1.50.04 PM.jpeg"
-                alt="Logo Ranas"
-                style={{ width: '88px', height: '88px', borderRadius: '50%', objectFit: 'cover', background: '#000', border: '2px solid var(--logo-green)', position: 'relative', display: 'block' }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--logo-green)', lineHeight: 1, letterSpacing: '-1px' }}>RANAS</div>
-              <div style={{ fontSize: '0.55rem', fontWeight: 800, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: '0.15rem' }}>Panel Admin</div>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: isMobile ? '0.4rem 2.6rem 0.15rem' : '0.35rem 0 0.1rem' }}>
+            <img
+              src={BRAND.logoMark}
+              alt="DP Sistemas"
+              style={{ width: isMobile ? '120px' : '148px', height: isMobile ? '114px' : '140px', objectFit: 'contain', display: 'block' }}
+            />
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: '0.55rem' }}>Panel administración</div>
           </div>
 
-          {/* Selector de Sede para Super-Admin */}
           {role === 'superadmin' && sedes.length > 0 && (
-            <div style={{ marginTop: '0.9rem', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.7rem' }}>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: '0.3rem' }}>SEDE ACTIVA</span>
+            <div style={{ marginTop: '0.95rem', padding: '0.55rem 0.7rem', background: '#f8fafc', border: '1px solid rgba(22,22,22,0.08)', borderRadius: '0.75rem' }}>
+              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: '#006970', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: '0.3rem' }}>SEDE ACTIVA</span>
               <select
                 value={activeSedeId || ''}
                 onChange={e => {
                   const val = e.target.value;
                   setActiveSedeId(val ? Number(val) : null);
                 }}
-                style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid rgba(255,255,255,0.15)', background: '#1e293b', color: '#fff', fontSize: '0.78rem', outline: 'none', fontWeight: 600, cursor: 'pointer' }}
+                style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '0.45rem', border: '1px solid rgba(22,22,22,0.12)', background: '#fff', color: '#161616', fontSize: '0.78rem', outline: 'none', fontWeight: 600, cursor: 'pointer' }}
               >
                 <option value="">Todas las Sedes</option>
                 {sedes.map(s => (
@@ -3594,16 +2907,17 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* Divisor */}
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', marginTop: '1rem' }} />
+          <div style={{ height: '1px', background: 'rgba(22,22,22,0.08)', marginTop: '0.95rem' }} />
         </div>
 
-        {/* ── ZONA 2: Nav items (SOLO esta zona scrollea si es necesario) ── */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.6rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', minHeight: 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.15rem', minHeight: 0 }}>
           {[
             { id: 'dashboard', label: 'Resumen', icon: <TrendingUp size={17} /> },
-            { id: 'attendance', label: 'Agenda', icon: <Calendar size={17} /> },
+            { id: 'schedule', label: 'Horarios', icon: <Clock size={17} /> },
+            { id: 'attendance', label: 'Asistencia', icon: <QrCode size={17} /> },
             { id: 'students', label: 'Alumnos', icon: <Users size={17} /> },
+            { id: 'grades', label: 'Grados', icon: <Award size={17} /> },
+            { id: 'events', label: 'Eventos', icon: <Ticket size={17} /> },
             { id: 'payments', label: 'Finanzas', icon: <CreditCard size={17} /> },
             { id: 'videos', label: 'Biblioteca', icon: <Play size={17} /> },
             { id: 'communications', label: 'Comunicaciones', icon: <Mail size={17} /> },
@@ -3612,35 +2926,34 @@ const App: React.FC = () => {
           ].filter(item => {
             const isSecondarySede = role === 'admin' && activeSedeId !== 1;
             if (isSecondarySede && ['videos', 'website'].includes(item.id)) return false;
-            if (isMobile) return ['dashboard', 'attendance', 'students', 'payments', 'videos', 'communications'].includes(item.id);
+            if (isMobile) return ['dashboard', 'schedule', 'attendance', 'students', 'grades', 'events', 'payments', 'videos', 'communications'].includes(item.id);
             return true;
           }).map(item => (
             <motion.button
               key={item.id}
-              whileHover={{ x: 4 }}
-              whileTap={{ scale: 0.97 }}
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.75rem 0.9rem', borderRadius: '0.75rem', border: 'none', background: activeTab === item.id ? 'rgba(5,168,106,0.15)' : 'transparent', color: '#fff', fontWeight: activeTab === item.id ? 800 : 500, fontSize: '0.85rem', cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden', opacity: activeTab === item.id ? 1 : 0.65, width: '100%', flexShrink: 0 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.68rem 0.8rem', borderRadius: '0.7rem', border: 'none', background: activeTab === item.id ? 'rgba(0,105,112,0.1)' : 'transparent', color: activeTab === item.id ? '#006970' : '#334155', fontWeight: activeTab === item.id ? 800 : 600, fontSize: '0.84rem', cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden', width: '100%', flexShrink: 0, fontFamily: 'inherit' }}
             >
               {activeTab === item.id && (
                 <motion.div
                   layoutId="sidebar-active"
-                  style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: '3px', borderRadius: '2px', background: 'var(--logo-green)' }}
+                  style={{ position: 'absolute', left: 0, top: '18%', bottom: '18%', width: '3px', borderRadius: '2px', background: '#006970' }}
                 />
               )}
-              <span style={{ color: activeTab === item.id ? 'var(--logo-green)' : 'rgba(255,255,255,0.7)', flexShrink: 0 }}>{item.icon}</span>
+              <span style={{ color: activeTab === item.id ? '#006970' : '#64748b', flexShrink: 0 }}>{item.icon}</span>
               {item.label}
             </motion.button>
           ))}
         </div>
 
-        {/* ── ZONA 3: Logout SIEMPRE visible, nunca scrollea ── */}
-        <div style={{ flexShrink: 0, padding: '0.8rem 1rem 1.2rem', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ flexShrink: 0, padding: '0.75rem 0.85rem 1.1rem', borderTop: '1px solid rgba(22,22,22,0.08)' }}>
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.97 }}
             onClick={handleLogout}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.7rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.06)', color: 'rgba(239,68,68,0.85)', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', width: '100%', transition: 'all 0.2s' }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', padding: '0.7rem 1rem', borderRadius: '0.7rem', border: '1px solid rgba(185,28,28,0.18)', background: '#fff', color: '#b91c1c', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', width: '100%', fontFamily: 'inherit' }}
           >
             <LogOut size={15} /> Cerrar sesión
           </motion.button>
@@ -3661,13 +2974,10 @@ const App: React.FC = () => {
             )}
             <div>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-                {(() => {
-                  const currentSedeId = activeSedeId || 1;
-                  const activeSede = sedes.find(s => s.id === Number(currentSedeId));
-                  return activeSede ? `Ranas · ${activeSede.name} · ${activeSede.address}` : 'Ranas · Orompello 1421';
-                })()}
+                Sede de ejemplo
               </div>
               <h1 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-1px', color: 'var(--logo-green)' }}>{tabLabels[activeTab]}</h1>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--panel-muted)' }}>Demo: se edita y se registra. No se borra el seed (alumnos, clases, material).</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }} className="mobile-hide">
@@ -3678,137 +2988,34 @@ const App: React.FC = () => {
                 value={studentSearchTerm} onChange={e => setStudentSearchTerm(e.target.value)} />
             </div>
             <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-              onClick={() => activeTab === 'videos' ? setIsAddingVideo(true) : handleOpenAddStudent()}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.4rem', background: 'var(--logo-green)', border: 'none', borderRadius: '100px', color: '#fff', fontWeight: 900, fontSize: '0.8rem', cursor: 'pointer', letterSpacing: '0.03em' }}>
-              <Plus size={16} /> {activeTab === 'videos' ? 'Nuevo Video' : 'Nuevo Alumno'}
+              onClick={() => handleOpenAddStudent()}
+              style={{ display: (activeTab === 'schedule' || activeTab === 'attendance' || activeTab === 'payments' || activeTab === 'grades' || activeTab === 'events' || activeTab === 'videos') ? 'none' : 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.4rem', background: 'var(--logo-green)', border: 'none', borderRadius: '100px', color: '#fff', fontWeight: 900, fontSize: '0.8rem', cursor: 'pointer', letterSpacing: '0.03em' }}>
+              <Plus size={16} /> Nuevo Alumno
             </motion.button>
           </div>
-          {isMobile && ['students', 'videos'].includes(activeTab) && (
+          {isMobile && ['students'].includes(activeTab) && (
             <motion.button whileTap={{ scale: 0.95 }}
-              onClick={() => activeTab === 'videos' ? setIsAddingVideo(true) : handleOpenAddStudent()}
-              style={{ background: 'var(--logo-green)', border: 'none', borderRadius: '12px', width: '45px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 10px rgba(5,168,106,0.3)', flexShrink: 0 }}>
+              onClick={() => handleOpenAddStudent()}
+              style={{ background: 'var(--logo-green)', border: 'none', borderRadius: '12px', width: '45px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 10px rgba(22,196,122,0.3)', flexShrink: 0 }}>
               <Plus size={20} />
             </motion.button>
           )}
         </motion.header>
 
-        <AnimatePresence mode="wait">
+        <ModuleBoundary name={activeTab}>
+        <AnimatePresence>
           {activeTab === 'dashboard' && (
-            <motion.div key="dashboard" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-              style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1.2rem' }}>
-              {/* Mobile Quick Actions on Dashboard (Moved to top) */}
-              {isMobile && (
-                <motion.div key="mobile-quick-actions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', gridColumn: 'span 1' }}>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleOpenAddStudent()}
-                    style={{ background: 'var(--logo-green)', border: 'none', borderRadius: '1.2rem', padding: '1.2rem', color: '#fff', fontWeight: 900, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Plus size={22} /> NUEVO ALUMNO
-                  </motion.button>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => setIsSendingNotice(true)}
-                    style={{ background: 'var(--panel-card)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', padding: '1.2rem', color: 'var(--panel-text)', fontWeight: 900, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Bell size={22} style={{ color: 'var(--logo-green)' }} /> NOTIFICACIÓN
-                  </motion.button>
-                </motion.div>
-              )}
-
-              {[
-                { title: 'Total Alumnos', value: students.length, icon: <Users size={18} />, sub: '+12% este mes', color: 'var(--panel-green-bg)', border: 'var(--panel-green-border)', onClick: () => { setActiveTab('students'); setStudentFilterPayment('ALL'); } },
-                { title: 'Alumnos al Día', value: students.filter(s => s.isPaid).length, icon: <Award size={18} />, sub: 'Pagos vigentes', color: 'var(--panel-green-bg)', border: 'var(--panel-green-border)', onClick: () => { setActiveTab('students'); setStudentFilterPayment('PAID'); } },
-                { title: 'Pendientes', value: students.filter(s => !s.isPaid).length, icon: <CreditCard size={18} />, sub: 'Requieren atención', color: 'var(--panel-red-bg)', border: 'var(--panel-red-border)', onClick: () => { setActiveTab('students'); setStudentFilterPayment('PENDING'); } },
-              ].map((card, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} onClick={card.onClick} whileHover={{ y: -4, scale: 1.02 }}
-                  style={{ background: card.color, border: `1px solid ${card.border}`, borderRadius: '1.2rem', padding: '1.5rem', cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.2rem' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(5,168,106,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--logo-green)' }}>{card.icon}</div>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--panel-muted)', letterSpacing: '0.05em' }}>{card.sub}</span>
-                  </div>
-                  <div style={{ fontSize: '2.2rem', fontWeight: 900, letterSpacing: '-1px', marginBottom: '0.2rem', color: 'var(--panel-text)' }}>{card.value}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--panel-muted)', fontWeight: 600 }}>{card.title}</div>
-                </motion.div>
-              ))}
-
-              {/* Upcoming Birthdays */}
-              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 3', marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--logo-green)' }}>Próximos Cumpleaños 🎂</h3>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '1rem' }}>
-                  {getUpcomingBirthdays().map((student: any) => {
-                    const parts = student.birthDate!.split('-');
-                    const bd = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                    return (
-                      <motion.div key={student.id} whileHover={{ y: -5 }} onClick={() => setSelectedStudent(student)}
-                        style={{ 
-                          background: student.isToday ? 'var(--panel-green-bg)' : 'var(--panel-surface)', 
-                          border: `1px solid ${student.isToday ? 'var(--logo-green)' : 'var(--panel-border)'}`, 
-                          borderRadius: '1.2rem', 
-                          padding: '1.5rem', 
-                          textAlign: 'center', 
-                          cursor: 'pointer',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}>
-                        {student.isToday && (
-                          <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '0.6rem', fontWeight: 900, color: 'var(--logo-green)', background: 'rgba(5,168,106,0.1)', padding: '2px 8px', borderRadius: '10px' }}>HOY 🎂</div>
-                        )}
-                        <div style={{ fontSize: '1.8rem', marginBottom: '0.6rem' }}>{student.isToday ? '🎉' : '🎁'}</div>
-                        <div style={{ fontWeight: 900, fontSize: '0.85rem', color: 'var(--panel-text)', marginBottom: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.name.split(' ')[0]}</div>
-                        <div style={{ fontSize: '0.75rem', color: student.isToday ? 'var(--panel-text)' : 'var(--logo-green)', fontWeight: 800 }}>
-                          {bd.toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })}
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Pending Payments */}
-              <section style={{ gridColumn: isMobile ? 'span 1' : 'span 2', marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--logo-green)' }}>Pagos Pendientes ⚠️</h3>
-                  <button style={{ background: 'none', border: 'none', color: 'var(--logo-green)', fontWeight: 800, fontSize: '0.75rem', letterSpacing: '0.05em', cursor: 'pointer' }} onClick={() => setActiveTab('students')}>VER TODOS LOS ALUMNOS</button>
-                </div>
-                <div style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', overflow: 'hidden' }}>
-                  {students.filter(s => !s.isPaid).slice(0, 5).map((student, i) => (
-                    <motion.div key={student.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.05 }}
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid var(--panel-border-light)', cursor: 'pointer', transition: 'background 0.2s' }}
-                      className="hover-light" onClick={() => setSelectedStudent(student)}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: '#ef4444', fontSize: '1rem' }}>{student.name[0]}</div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '2px', color: 'var(--panel-text)' }}>{student.name}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--panel-muted)' }}>{student.phone}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div className={`belt-badge belt-${student.belt}`} style={{ fontSize: '0.6rem', padding: '0.3rem 0.8rem' }}>{beltLabels[student.belt]}</div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#ef4444' }}>⚠ PENDIENTE</span>
-                      </div>
-                    </motion.div>
-                  ))}
-                  {students.filter(s => !s.isPaid).length === 0 && (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--panel-muted)' }}>Todo al día ✨</div>
-                  )}
-                </div>
-              </section>
-
-              {/* Belt distribution */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--logo-green)', marginBottom: '0.2rem' }}>Distribución</h3>
-                <div style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', padding: '1.5rem', display: 'flex', alignItems: 'flex-end', gap: '0.6rem', height: '220px' }}>
-                  {(['WHITE', 'BLUE', 'PURPLE', 'BROWN', 'BLACK', 'GRAY'] as Belt[]).map((belt) => {
-                    const count = students.filter(s => s.belt === belt).length;
-                    const h = Math.max(10, (count / (students.length || 1)) * 100);
-                    return (
-                      <div key={belt} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flex: 1, justifyContent: 'flex-end' }}>
-                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--panel-muted)' }}>{count}</div>
-                        <div style={{ width: '100%', height: `${h}%`, background: `var(--belt-${belt.toLowerCase()})`, borderRadius: '6px', border: belt === 'WHITE' ? '1px solid var(--panel-border)' : 'none' }} />
-                        <div style={{ fontSize: '0.6rem', fontWeight: 900, color: 'var(--panel-muted-soft)' }}>{beltLabels[belt][0]}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            <motion.div key="dashboard" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <DashboardPanel
+                students={students}
+                slots={classSlots}
+                activeSedeId={activeSedeId}
+                onOpenStudent={setSelectedStudent}
+                onGo={(tab) => {
+                  if (tab === 'students') setStudentFilterPayment('ALL');
+                  setActiveTab(tab);
+                }}
+              />
             </motion.div>
           )}
 
@@ -3816,6 +3023,24 @@ const App: React.FC = () => {
 
           {activeTab === 'students' && (
             <motion.div key="students" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <section className="dp-card" style={{ marginBottom: '1rem' }}>
+                <div className="dp-head">
+                  <div>
+                    <div className="dp-kicker">Alumnos</div>
+                    <h2>Fichas</h2>
+                  </div>
+                </div>
+                <PanelTabs
+                  name="alumnos"
+                  value={studentFilterPayment}
+                  onChange={(id) => setStudentFilterPayment(id as typeof studentFilterPayment)}
+                  items={[
+                    { id: 'ALL', label: 'Todos' },
+                    { id: 'PAID', label: 'Al día' },
+                    { id: 'PENDING', label: 'Pendientes' },
+                  ]}
+                />
+              <div className="dp-body">
               {/* Filters + Search for Mobile */}
               <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 {isMobile && (
@@ -3827,13 +3052,6 @@ const App: React.FC = () => {
                   </div>
                 )}
                 <select className="glass" style={{ padding: '0.7rem 1rem', borderRadius: '1rem', background: 'var(--panel-surface)', color: 'var(--panel-text)', border: '1px solid var(--panel-border)', outline: 'none', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', flex: isMobile ? '1 1 45%' : 'none', minWidth: 0 }}
-                  value={studentFilterPayment} onChange={e => setStudentFilterPayment(e.target.value as any)}>
-                  <option value="ALL">Todos los estados</option>
-                  <option value="PAID">Al Día</option>
-                  <option value="PENDING">Pendiente</option>
-                </select>
-                
-                <select className="glass" style={{ padding: '0.7rem 1rem', borderRadius: '1rem', background: 'var(--panel-surface)', color: 'var(--panel-text)', border: '1px solid var(--panel-border)', outline: 'none', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', flex: isMobile ? '1 1 45%' : 'none', minWidth: 0 }}
                   value={studentFilterBelt} onChange={e => setStudentFilterBelt(e.target.value as any)}>
                   <option value="ALL">Todos los cinturones</option>
                   {Object.keys(beltLabels).map(b => (
@@ -3843,16 +3061,16 @@ const App: React.FC = () => {
 
                 <select className="glass" style={{ padding: '0.7rem 1rem', borderRadius: '1rem', background: 'var(--panel-surface)', color: 'var(--panel-text)', border: '1px solid var(--panel-border)', outline: 'none', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', flex: isMobile ? '1 1 100%' : 'none', minWidth: 0 }}
                   value={studentFilterIBJJFCategory} onChange={e => setStudentFilterIBJJFCategory(e.target.value)}>
-                  <option value="ALL">Todas las Categorías IBJJF</option>
-                  <option value="GALO">Rooster / Galo</option>
-                  <option value="PLUMA">Light Feather / Pluma</option>
-                  <option value="PENA">Feather / Pena</option>
-                  <option value="LEVE">Light / Leve</option>
-                  <option value="MEDIO">Middle / Médio</option>
-                  <option value="MEIO_PESADO">Medium Heavy / Meio-Pesado</option>
-                  <option value="PESADO">Heavy / Pesado</option>
-                  <option value="SUPER_PESADO">Super Heavy / Super Pesado</option>
-                  <option value="PESADISSIMO">Ultra Heavy / Pesadíssimo</option>
+                  <option value="ALL">Todas las categorías</option>
+                  <option value="GALO">Galo</option>
+                  <option value="PLUMA">Pluma</option>
+                  <option value="PENA">Pena</option>
+                  <option value="LEVE">Leve</option>
+                  <option value="MEDIO">Medio</option>
+                  <option value="MEIO_PESADO">Medio pesado</option>
+                  <option value="PESADO">Pesado</option>
+                  <option value="SUPER_PESADO">Super pesado</option>
+                  <option value="PESADISSIMO">Pesadísimo</option>
                 </select>
 
                 {!isMobile && (
@@ -3886,29 +3104,39 @@ const App: React.FC = () => {
                           if (studentFilterIBJJFCategory === 'ALL') return true;
                           const cat = calculateIBJJFCategory(s.birthDate, s.weight, s.gender, s.belt);
                           const div = (cat.divisionName || '').toLowerCase();
-                          if (studentFilterIBJJFCategory === 'GALO') return div.includes('galo') || div.includes('rooster');
-                          if (studentFilterIBJJFCategory === 'PLUMA') return div.includes('pluma') || div.includes('light feather');
-                          if (studentFilterIBJJFCategory === 'PENA') return div.includes('pena') || div.includes('feather');
-                          if (studentFilterIBJJFCategory === 'LEVE') return div.includes('leve') || (div.includes('light') && !div.includes('feather'));
-                          if (studentFilterIBJJFCategory === 'MEDIO') return (div.includes('médio') || div.includes('middle')) && !div.includes('meio') && !div.includes('medium');
-                          if (studentFilterIBJJFCategory === 'MEIO_PESADO') return div.includes('meio-pesado') || div.includes('medium heavy');
-                          if (studentFilterIBJJFCategory === 'PESADO') return (div.includes('pesado') || div.includes('heavy')) && !div.includes('super') && !div.includes('meio') && !div.includes('medium');
-                          if (studentFilterIBJJFCategory === 'SUPER_PESADO') return div.includes('super pesado') || div.includes('super heavy');
-                          if (studentFilterIBJJFCategory === 'PESADISSIMO') return div.includes('pesadíssimo') || div.includes('ultra heavy');
+                          if (studentFilterIBJJFCategory === 'GALO') return div.includes('galo');
+                          if (studentFilterIBJJFCategory === 'PLUMA') return div.includes('pluma');
+                          if (studentFilterIBJJFCategory === 'PENA') return div === 'pena' || div.startsWith('pena ');
+                          if (studentFilterIBJJFCategory === 'LEVE') return div.includes('leve');
+                          if (studentFilterIBJJFCategory === 'MEDIO') return div === 'medio' || (div.includes('medio') && !div.includes('pesado'));
+                          if (studentFilterIBJJFCategory === 'MEIO_PESADO') return div.includes('medio pesado');
+                          if (studentFilterIBJJFCategory === 'PESADO') return div === 'pesado';
+                          if (studentFilterIBJJFCategory === 'SUPER_PESADO') return div.includes('super pesado');
+                          if (studentFilterIBJJFCategory === 'PESADISSIMO') return div.includes('pesadísimo') || div.includes('pesadisimo');
                           return true;
                         })
                     .map((student) => (
                       <div key={student.id}
                         style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1rem', padding: '0.8rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flex: 1, minWidth: 0 }}>
-                          <div className="strict-avatar-container" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--panel-surface)', border: `1px solid var(--panel-border)` }}>
-                            <img 
-                              src={student.avatar ? (student.avatar.startsWith('http') || student.avatar.startsWith('data:') ? student.avatar : `${API_URL}${student.avatar}`) : getFallbackAvatarUrl(student.name)} 
-                              loading="lazy"
-                              decoding="async"
+                          <button
+                            type="button"
+                            className="dp-avatar-btn"
+                            style={{ width: '40px', height: '40px' }}
+                            onClick={() => {
+                              setPhotoLightboxStudent(student);
+                            }}
+                            aria-label={`Ver foto de ${student.name}`}
+                          >
+                            <img
+                              src={studentPhoto(student)}
+                              alt=""
+                              onLoad={(e) => {
+                                const img = e.currentTarget;
+                              }}
                               onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(student.name); }}
                             />
-                          </div>
+                          </button>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--panel-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.name}</div>
                             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '2px' }}>
@@ -3917,7 +3145,7 @@ const App: React.FC = () => {
                               </span>
                               {(() => {
                                 const cat = calculateIBJJFCategory(student.birthDate, student.weight, student.gender, student.belt);
-                                if (cat.hasGender && !cat.divisionName.includes('Pendiente') && !cat.divisionName.includes('definir')) {
+                                if (cat.ready) {
                                   return (
                                     <span style={{ fontSize: '0.6rem', fontWeight: 800, background: 'rgba(5,168,106,0.12)', color: 'var(--logo-green)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
                                       {cat.divisionName.split('/')[0].trim()}
@@ -3997,29 +3225,36 @@ const App: React.FC = () => {
                           if (studentFilterIBJJFCategory === 'ALL') return true;
                           const cat = calculateIBJJFCategory(s.birthDate, s.weight, s.gender, s.belt);
                           const div = (cat.divisionName || '').toLowerCase();
-                          if (studentFilterIBJJFCategory === 'GALO') return div.includes('galo') || div.includes('rooster');
-                          if (studentFilterIBJJFCategory === 'PLUMA') return div.includes('pluma') || div.includes('light feather');
-                          if (studentFilterIBJJFCategory === 'PENA') return div.includes('pena') || div.includes('feather');
-                          if (studentFilterIBJJFCategory === 'LEVE') return div.includes('leve') || (div.includes('light') && !div.includes('feather'));
-                          if (studentFilterIBJJFCategory === 'MEDIO') return (div.includes('médio') || div.includes('middle')) && !div.includes('meio') && !div.includes('medium');
-                          if (studentFilterIBJJFCategory === 'MEIO_PESADO') return div.includes('meio-pesado') || div.includes('medium heavy');
-                          if (studentFilterIBJJFCategory === 'PESADO') return (div.includes('pesado') || div.includes('heavy')) && !div.includes('super') && !div.includes('meio') && !div.includes('medium');
-                          if (studentFilterIBJJFCategory === 'SUPER_PESADO') return div.includes('super pesado') || div.includes('super heavy');
-                          if (studentFilterIBJJFCategory === 'PESADISSIMO') return div.includes('pesadíssimo') || div.includes('ultra heavy');
+                          if (studentFilterIBJJFCategory === 'GALO') return div.includes('galo');
+                          if (studentFilterIBJJFCategory === 'PLUMA') return div.includes('pluma');
+                          if (studentFilterIBJJFCategory === 'PENA') return div === 'pena' || div.startsWith('pena ');
+                          if (studentFilterIBJJFCategory === 'LEVE') return div.includes('leve');
+                          if (studentFilterIBJJFCategory === 'MEDIO') return div === 'medio' || (div.includes('medio') && !div.includes('pesado'));
+                          if (studentFilterIBJJFCategory === 'MEIO_PESADO') return div.includes('medio pesado');
+                          if (studentFilterIBJJFCategory === 'PESADO') return div === 'pesado';
+                          if (studentFilterIBJJFCategory === 'SUPER_PESADO') return div.includes('super pesado');
+                          if (studentFilterIBJJFCategory === 'PESADISSIMO') return div.includes('pesadísimo') || div.includes('pesadisimo');
                           return true;
                         })
                         .map((student) => (
                           <tr key={student.id} style={{ borderBottom: '1px solid var(--glass-border)', transition: 'all 0.3s' }} className="hover-light">
                             <td style={{ padding: '1.5rem' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                <div className="strict-avatar-container" style={{ width: '38px', height: '38px', border: '2px solid var(--glass-border)', background: 'var(--panel-surface)' }}>
-                                  <img 
-                                    src={student.avatar ? (student.avatar.startsWith('http') || student.avatar.startsWith('data:') ? student.avatar : `${API_URL}${student.avatar}`) : getFallbackAvatarUrl(student.name)} 
-                                    loading="lazy"
-                                    decoding="async"
+                                <button
+                                  type="button"
+                                  className="dp-avatar-btn"
+                                  style={{ width: '44px', height: '44px' }}
+                                  onClick={() => {
+                                    setPhotoLightboxStudent(student);
+                                  }}
+                                  aria-label={`Ver foto de ${student.name}`}
+                                >
+                                  <img
+                                    src={studentPhoto(student)}
+                                    alt=""
                                     onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(student.name); }}
                                   />
-                                </div>
+                                </button>
                                 <div>
                                   <p style={{ fontWeight: 900, fontSize: '1rem', color: 'var(--text-main)', margin: 0 }}>{student.name}</p>
                                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{student.email}</p>
@@ -4032,7 +3267,7 @@ const App: React.FC = () => {
                             <td style={{ padding: '1.5rem' }}>
                               {(() => {
                                 const cat = calculateIBJJFCategory(student.birthDate, student.weight, student.gender, student.belt);
-                                if (!cat.hasGender || cat.divisionName.includes('Pendiente') || cat.divisionName.includes('definir')) {
+                                if (!cat.ready) {
                                   return <span style={{ fontSize: '0.7rem', color: 'var(--panel-muted)', fontWeight: 600 }}>Sin registrar</span>;
                                 }
                                 return (
@@ -4081,98 +3316,19 @@ const App: React.FC = () => {
                   </table></div>
                 </div>
               )}
+              </div>
+              </section>
             </motion.div>
           )}
 
           {activeTab === 'videos' && (
-            <motion.div key="videos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="grid-layout" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
-                {videos.length === 0 && (
-                  <div style={{ textAlign: 'center', gridColumn: '1 / -1', padding: '5rem 2rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', border: '1px solid var(--glass-border)' }}>
-                      <Folder size={32} style={{ opacity: 0.4, color: 'var(--logo-green)' }} />
-                    </div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Biblioteca Vacía</h3>
-                    <p style={{ fontSize: '0.85rem', maxWidth: '400px', lineHeight: 1.5, opacity: 0.7 }}>Aún no has creado "Situaciones". Haz clic en el botón de arriba **"+ Nuevo Video"** para inaugurar tu primera carpeta de técnicas.</p>
-                  </div>
-                )}
-                {Array.from(new Set(videos.map(v => v.category || 'General'))).map(category => {
-                  const categoryVideos = videos.filter(v => (v.category || 'General') === category);
-                  return (
-                    <motion.div 
-                      whileHover={{ y: -8, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} 
-                      key={category} 
-                      onClick={() => setSelectedCategory(category)}
-                      className="glass" 
-                      style={{ padding: '2.5rem', borderRadius: '2rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden' }}>
-                      
-                      <div style={{ position: 'absolute', top: 0, right: 0, width: '120px', height: '120px', background: 'radial-gradient(circle, rgba(5,168,106,0.06) 0%, transparent 70%)', filter: 'blur(30px)' }} />
-                      
-                      <div style={{ width: '50px', height: '50px', borderRadius: '15px', background: 'rgba(5,168,106,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--logo-green)' }}>
-                        <Folder size={24} />
-                      </div>
-                      <div>
-                        <h4 style={{ fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)', marginBottom: '0.4rem', textTransform: 'capitalize' }}>{category}</h4>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>Aquí verás tus videos disponibles para tus alumnos sobre {category}.</p>
-                      </div>
-                      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--logo-green)' }}>{categoryVideos.length} Videos</span>
-                        <ChevronRight size={16} style={{ opacity: 0.5 }} />
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              {/* Group Modal for selected category */}
-              {selectedCategory && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', backdropFilter: 'blur(10px)' }}>
-                  <motion.div style={{ width: '100%', maxWidth: '900px', padding: '3rem', borderRadius: '2rem', background: 'var(--panel-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)', boxShadow: '0 40px 100px -20px rgba(0,0,0,0.5)', maxHeight: '85vh', overflowY: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1.5rem' }}>
-                      <div>
-                        <h2 style={{ fontSize: '2rem', fontWeight: 900, textTransform: 'capitalize', color: 'var(--text-main)' }}>{selectedCategory}</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Videos disponibles para todos tus alumnos</p>
-                      </div>
-                      <button onClick={() => setSelectedCategory(null)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
-                      {videos.filter(v => (v.category || 'General') === selectedCategory).map(video => (
-                        <div key={video.id} className="glass" style={{ borderRadius: '1.5rem', overflow: 'hidden', border: '1px solid var(--glass-border)', background: 'var(--panel-card)' }}>
-                          <div style={{ height: '140px', position: 'relative', background: '#000' }}>
-                            <img 
-                              src={video.thumbnail || 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800'} 
-                              alt={video.title} 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                              onError={(e) => {
-                                const id = getYouTubeID(video.url);
-                                if (id && !e.currentTarget.src.includes('hqdefault.jpg')) {
-                                  e.currentTarget.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
-                                } else {
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1599058917232-d750c185ca0d?w=800';
-                                }
-                              }}
-                            />
-                          </div>
-                          <div style={{ padding: '1.2rem' }}>
-                            <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '0.4rem', color: 'var(--text-main)' }}>{video.title}</h4>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', height: '2rem', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '1rem' }}>{video.description}</p>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              <button className="btn-primary" style={{ flex: 1, padding: '0.6rem', fontSize: '0.75rem' }} onClick={() => setPlayingVideo(video)}>VER</button>
-                              <button style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', padding: '0.5rem', cursor: 'pointer' }} onClick={async () => {
-                                if(confirm('¿Eliminar video?')) {
-                                                                    await fetch(`${API_URL}/api/videos/${video.id}`, { method: 'DELETE' });
-                                  setVideos(videos.filter(v => v.id !== video.id));
-                                }
-                              }}>Eliminar</button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
+            <motion.div key="videos" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <LibraryPanel
+                apiUrl={API_URL}
+                videos={videos}
+                students={students}
+                onVideosChange={setVideos}
+              />
             </motion.div>
           )}
 
@@ -4217,7 +3373,7 @@ const App: React.FC = () => {
                               height="100%" 
                               src={`https://www.youtube-nocookie.com/embed/${id}?modestbranding=1&rel=0&iv_load_policy=3&showinfo=0&disablekb=1&controls=1&autoplay=0`}
                               style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                              title="Reproductor Seguro Ranas" 
+                              title="Reproductor seguro" 
                               allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" 
                               sandbox="allow-scripts allow-same-origin allow-presentation"
                               allowFullScreen
@@ -4234,7 +3390,7 @@ const App: React.FC = () => {
                     <div>
                       <h5 style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.5rem' }}>Sobre este contenido</h5>
                       <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                        Este video es parte del material exclusivo de **Dojo Ranas**. <br />
+                        Este video es parte del material exclusivo de **Academia Demo**. <br />
                         Está prohibida su reproducción parcial o total fuera de este portal oficial.
                       </p>
                     </div>
@@ -4245,17 +3401,33 @@ const App: React.FC = () => {
           </AnimatePresence>
 
           {activeTab === 'communications' && (
-            <motion.div key="communications" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
-              style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '2.5rem' }}>
-              
-              {/* Notification Editor */}
+            <motion.div key="communications" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+              <section className="dp-card">
+                <div className="dp-head">
+                  <div>
+                    <div className="dp-kicker">Comunicaciones</div>
+                    <h2>{commTab === 'aviso' ? 'Aviso a alumnos' : commTab === 'cumple' ? 'Cumpleaños' : 'Vista previa'}</h2>
+                  </div>
+                </div>
+                <PanelTabs
+                  name="comunicaciones"
+                  value={commTab}
+                  onChange={(id) => setCommTab(id as typeof commTab)}
+                  items={[
+                    { id: 'aviso', label: 'Aviso' },
+                    { id: 'cumple', label: 'Cumpleaños' },
+                    { id: 'preview', label: 'Vista previa' },
+                  ]}
+                />
+                <div className="dp-body">
+              {commTab === 'aviso' && (
               <div className="glass" style={{ padding: '2.5rem', borderRadius: '2rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ width: '45px', height: '45px', borderRadius: '12px', background: 'rgba(167,139,250,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}>
+                  <div style={{ width: '45px', height: '45px', borderRadius: '12px', background: 'rgba(0,105,112,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#006970' }}>
                     <Bell size={22} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text-main)' }}>Editor de Notificación</h3>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>Editor de aviso</h3>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Redacta el mensaje para el portal y el email.</p>
                   </div>
                 </div>
@@ -4272,15 +3444,15 @@ const App: React.FC = () => {
                     style={{ padding: '1rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1rem', color: 'var(--text-main)', outline: 'none', resize: 'none', fontSize: '0.9rem' }} />
                 </div>
 
-                <div style={{ padding: '1.2rem', background: 'rgba(5,168,106,0.05)', borderRadius: '1.2rem', border: '1px dashed var(--logo-green)' }}>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--logo-green)', fontWeight: 800, lineHeight: 1.5 }}>
-                    📢 Este mensaje aparecerá exclusivamente como notificación en el portal de los alumnos (No consume créditos de email).
+                <div style={{ padding: '1.2rem', background: 'rgba(0,105,112,0.06)', borderRadius: '1.2rem', border: '1px dashed #006970' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#006970', fontWeight: 700, lineHeight: 1.5 }}>
+                    Este mensaje aparece como aviso en el portal de los alumnos. No consume créditos de email.
                   </p>
                 </div>
 
                 <button onClick={async () => {
                   if(!noticeData.subject || !noticeData.message) return alert('Por favor escribe un asunto y un mensaje.');
-                  if(confirm('¿Deseas LANZAR esta notificación a todos los alumnos?')) {
+                  if(confirm('¿Enviar este aviso a todos los alumnos?')) {
                     try {
                       setIsSendingNotice(true);
                       const queryParams = activeSedeId ? `?sedeId=${activeSedeId}` : '';
@@ -4295,26 +3467,27 @@ const App: React.FC = () => {
                     finally { setIsSendingNotice(false); }
                   }
                 }} disabled={isSendingNotice} className="btn-primary" 
-                  style={{ padding: '1.4rem', borderRadius: '1.5rem', fontWeight: 900, justifyContent: 'center', background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)', boxShadow: '0 10px 20px rgba(167,139,250,0.3)' }}>
-                  {isSendingNotice ? 'Enviando...' : '🚀 LANZAR NOTIFICACIÓN'}
+                  style={{ padding: '1.2rem', borderRadius: '1rem', fontWeight: 800, justifyContent: 'center', background: '#006970', boxShadow: '0 10px 20px rgba(0,105,112,0.22)' }}>
+                  {isSendingNotice ? 'Enviando...' : 'Enviar aviso'}
                 </button>
               </div>
+              )}
 
-              {/* Birthday Greetings Panel */}
-              <div className="glass" style={{ padding: '2.5rem', borderRadius: '2rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {commTab === 'cumple' && (
+              <div className="glass" style={{ padding: '1rem 0 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ width: '45px', height: '45px', borderRadius: '12px', background: 'rgba(5,168,106,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--logo-green)' }}>
+                  <div style={{ width: '45px', height: '45px', borderRadius: '12px', background: 'rgba(0,105,112,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#006970' }}>
                     <Calendar size={22} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text-main)' }}>Saludos de Cumpleaños</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Envía felicitaciones automáticas a quienes cumplen hoy.</p>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>Saludos de cumpleaños</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Envía felicitaciones a quienes cumplen hoy.</p>
                   </div>
                 </div>
 
-                <div style={{ padding: '1.2rem', background: 'rgba(5,168,106,0.05)', borderRadius: '1.2rem', border: '1px dashed var(--logo-green)' }}>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--logo-green)', fontWeight: 800, lineHeight: 1.5 }}>
-                    🎁 El sistema buscará a todos los alumnos que cumplen años hoy ({new Date().toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })}) y les enviará un correo especial personalizado de Dojo Ranas.
+                <div style={{ padding: '1.2rem', background: 'rgba(0,105,112,0.06)', borderRadius: '1.2rem', border: '1px dashed #006970' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#006970', fontWeight: 700, lineHeight: 1.5 }}>
+                    El sistema busca a los alumnos que cumplen hoy ({new Date().toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })}) y les envía un correo de la academia.
                   </p>
                 </div>
 
@@ -4322,28 +3495,24 @@ const App: React.FC = () => {
                   onClick={handleSendBirthdayGreetings} 
                   disabled={isSendingBirthdays}
                   className="btn-primary" 
-                  style={{ padding: '1.4rem', borderRadius: '1.5rem', fontWeight: 900, justifyContent: 'center', background: 'var(--logo-green)', boxShadow: '0 10px 20px rgba(5,168,106,0.2)' }}
+                  style={{ padding: '1.2rem', borderRadius: '1rem', fontWeight: 800, justifyContent: 'center', background: '#006970', boxShadow: '0 10px 20px rgba(0,105,112,0.2)' }}
                 >
                   <motion.div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                    {isSendingBirthdays ? 'Procesando...' : (
-                      <>
-                        <span style={{ fontSize: '1.2rem' }}>🎂</span> 
-                        ENVIAR SALUDOS DE HOY
-                      </>
-                    )}
+                    {isSendingBirthdays ? 'Procesando...' : 'Enviar saludos de hoy'}
                   </motion.div>
                 </button>
               </div>
+              )}
 
-              {/* Live Preview Card */}
+              {commTab === 'preview' && (
               <div className="glass" style={{ padding: '2.5rem', borderRadius: '2rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <div style={{ width: '45px', height: '45px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                     <Monitor size={22} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text-main)' }}>Vista Previa en Portal</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Así es como lo verán los alumnos en su App.</p>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>Vista previa en el portal</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Así lo ven los alumnos en su app.</p>
                   </div>
                 </div>
 
@@ -4356,29 +3525,29 @@ const App: React.FC = () => {
 
                    {/* Global Broadcast Notice */}
                    {noticeData.subject && !isNoticeDismissed && (
-                     <section style={{ margin: '0 1.5rem 2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #1e1b4b, #312e81)', borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', position: 'relative', overflow: 'hidden' }}>
+                     <section style={{ margin: '0 1.5rem 2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #063a3e, #006970)', borderRadius: '1.5rem', border: '1px solid rgba(255,255,255,0.1)', position: 'relative', overflow: 'hidden' }}>
                        <button 
                          onClick={() => setIsNoticeDismissed(true)}
                          style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px', borderRadius: '50%', cursor: 'pointer', zIndex: 10 }}
                        >
                          <X size={16} />
                        </button>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.8rem', color: '#a78bfa' }}>
-                         <Bell size={18} fill="#a78bfa" />
-                         <span style={{ fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AVISO IMPORTANTE</span>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.8rem', color: '#7ee0e6' }}>
+                         <Bell size={18} fill="#7ee0e6" />
+                         <span style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Aviso de la academia</span>
                        </div>
-                       <h4 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#fff', marginBottom: '0.6rem', lineHeight: 1.3 }}>{noticeData.subject}</h4>
-                       <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: (noticeData.message || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong style="color:#a78bfa; font-weight:900;">$1</strong>') }} />
+                       <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', marginBottom: '0.6rem', lineHeight: 1.3 }}>{noticeData.subject}</h4>
+                       <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: (noticeData.message || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong style="color:#7ee0e6; font-weight:800;">$1</strong>') }} />
                      </section>
                    )}
                    {/* The Banner Preview */}
-                   <motion.div style={{ padding: '1.2rem', borderRadius: '1.2rem', background: '#f5f3ff', border: '1px solid #a78bfa', display: 'flex', flexDirection: 'column', gap: '0.4rem', boxShadow: '0 10px 30px rgba(167,139,250,0.15)', position: 'relative', overflow: 'hidden' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#7c3aed', marginBottom: '0.2rem' }}>
-                        <Bell size={14} fill="#7c3aed" />
-                        <span style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase' }}>AVISO INTEGRAL</span>
+                   <motion.div style={{ padding: '1.2rem', borderRadius: '1.2rem', background: '#e8f4f4', border: '1px solid #006970', display: 'flex', flexDirection: 'column', gap: '0.4rem', boxShadow: '0 10px 30px rgba(0,105,112,0.12)', position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#006970', marginBottom: '0.2rem' }}>
+                        <Bell size={14} fill="#006970" />
+                        <span style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Aviso</span>
                       </div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#1e1b4b', lineHeight: 1.2 }}>{noticeData.subject || 'Título de ejemplo'}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#5b21b6', lineHeight: 1.4, margin: 0 }} dangerouslySetInnerHTML={{ __html: noticeData.message ? noticeData.message.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--logo-green); font-weight:900;">$1</strong>') : 'Aquí se mostrará el cuerpo de tu mensaje redactado a la izquierda...' }} />
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#134e4a', lineHeight: 1.2 }}>{noticeData.subject || 'Título de ejemplo'}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#0f766e', lineHeight: 1.4, margin: 0 }} dangerouslySetInnerHTML={{ __html: noticeData.message ? noticeData.message.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong style="color:#006970; font-weight:800;">$1</strong>') : 'Aquí se muestra el cuerpo del aviso…' }} />
                     </motion.div>
 
                     {/* Mockup rest of portal */}
@@ -4388,134 +3557,85 @@ const App: React.FC = () => {
                     </div>
                 </div>
               </div>
+              )}
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {activeTab === 'schedule' && (
+            <motion.div key="schedule" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
+              <SchedulePanel
+                slots={classSlots}
+                sedes={sedes}
+                activeSedeId={activeSedeId}
+                saving={savingSchedule}
+                onSave={handleSaveSchedule}
+              />
             </motion.div>
           )}
 
           {activeTab === 'attendance' && (
             <motion.div key="attendance" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <div>
-                   <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--logo-green)' }}>Agenda de Clases Semanal 🥋</h3>
-                   <p style={{ fontSize: '0.8rem', color: 'var(--panel-muted)' }}>Lista de alumnos inscritos para cada entrenamiento esta semana.</p>
-                </div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--logo-green)', background: 'var(--panel-green-bg)', padding: '0.5rem 1rem', borderRadius: '100px', border: '1px solid var(--panel-green-border)' }}>
-                   SEMANA ACTUAL: {new Date(getWeekStart(new Date())).toLocaleDateString('es-CL')} AL {new Date(getWeekStart(new Date()) + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('es-CL')}
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1.5rem' }}>
-                 {[...ADULT_SCHEDULE, ...KIDS_SCHEDULE].filter((v, i, a) => a.findIndex(t => t.day === v.day) === i).sort((a,b) => {
-                    const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-                    return days.indexOf(a.day) - days.indexOf(b.day);
-                 }).map((dayItem: any, dIdx: number) => (
-                    <div key={dIdx} style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1.5rem', padding: '1.5rem' }}>
-                       <div style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--logo-green)', marginBottom: '1.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{dayItem.day}</div>
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          {[...ADULT_SCHEDULE, ...KIDS_SCHEDULE].filter(s => s.day === dayItem.day).flatMap(s => s.classes).filter((v, i, a) => a.findIndex(t => t.time === v.time && t.name === v.name) === i).sort((a,b) => a.time.localeCompare(b.time)).map((cls: any, cIdx: number) => {
-                             const bookedStudents = students.filter(s => 
-                                (s.scheduledClasses || []).some((sc: any) => 
-                                   sc.timestamp >= getWeekStart(new Date()) && 
-                                   sc.day === dayItem.day && 
-                                   sc.time === cls.time
-                                )
-                             );
-
-                             return (
-                                <div key={cIdx} style={{ background: 'var(--panel-card)', border: '1px solid var(--panel-border)', borderRadius: '1.2rem', padding: '1rem' }}>
-                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
-                                      <div style={{ flex: 1 }}>
-                                         <div style={{ fontSize: '0.85rem', fontWeight: 900, color: 'var(--panel-text)' }}>{cls.time} - {cls.name}</div>
-                                         <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--panel-muted)' }}>{cls.name.toLowerCase().includes('campeones') ? 'INFANTIL (5-12)' : 'ADULTOS'}</div>
-                                      </div>
-                                      <div style={{ background: bookedStudents.length > 0 ? 'var(--logo-green)' : 'var(--panel-border-light)', color: bookedStudents.length > 0 ? '#fff' : 'var(--panel-muted)', padding: '0.3rem 0.7rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, marginLeft: '1rem' }}>
-                                         {bookedStudents.length} ALUMNOS
-                                      </div>
-                                   </div>
-                                   
-                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                      {bookedStudents.map((s: any) => (
-                                         <div key={s.id} onClick={() => setSelectedStudent(s)} style={{ cursor: 'pointer', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', padding: '0.4rem 0.8rem', borderRadius: '100px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--panel-text)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: `var(--belt-${s.belt.toLowerCase()})`, border: s.belt === 'WHITE' ? '1px solid #ddd' : 'none' }} />
-                                            {s.name.split(' ')[0]} {s.name.split(' ')[1] || ''}
-                                         </div>
-                                      ))}
-                                      {bookedStudents.length === 0 && (
-                                         <div style={{ fontSize: '0.7rem', color: 'var(--panel-muted)', fontStyle: 'italic', padding: '0.2rem 0' }}>Sin inscritos todavía</div>
-                                      )}
-                                   </div>
-                                </div>
-                             );
-                          })}
-                       </div>
-                    </div>
-                 ))}
-              </div>
+              <AttendancePanel
+                slots={classSlots}
+                students={students}
+                sedes={sedes}
+                activeSedeId={activeSedeId}
+                apiUrl={API_URL}
+                weekStart={getWeekStart(new Date())}
+              />
             </motion.div>
           )}
 
+          {activeTab === 'grades' && (
+            <motion.div key="grades" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
+              <GradesPanel students={students} onSave={handleUpdateStudent} />
+            </motion.div>
+          )}
+
+          {activeTab === 'events' && (
+            <motion.div key="events" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
+              <EventsPanel apiUrl={API_URL} />
+            </motion.div>
+          )}
 
           {activeTab === 'payments' && (
             <motion.div key="payments" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr', gap: isMobile ? '1.5rem' : '2.5rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  <div className="glass" style={{ padding: '2rem', borderRadius: '1.5rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: 0, right: 0, width: '100px', height: '100px', background: 'radial-gradient(circle, rgba(5,168,106,0.1) 0%, transparent 70%)', filter: 'blur(20px)' }} />
-                    <p style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>RECAUDACIÓN MES</p>
-                    <p style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--logo-green)' }}>{formatCLP(students.filter(s => s.isPaid).reduce((acc, curr) => acc + (Number(curr.monthlyFee) || 0), 0))}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>De un total proyectado de {formatCLP(students.reduce((acc, curr) => acc + (Number(curr.monthlyFee) || 0), 0))}</p>
-                  </div>
-
-                  <div className="glass" style={{ padding: '2rem', borderRadius: '1.5rem', border: '1px solid var(--glass-border)', background: 'var(--panel-card)' }}>
-                    <p style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>PENDIENTE DE COBRO</p>
-                    <p style={{ fontSize: '2rem', fontWeight: 900, color: '#ef4444' }}>{formatCLP(students.filter(s => !s.isPaid).reduce((acc, curr) => acc + (Number(curr.monthlyFee) || 0), 0))}</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Sobre {students.filter(s => !s.isPaid).length} alumnos pendientes</p>
-                  </div>
-                </div>
-
-                <div className="glass" style={{ borderRadius: '1.5rem', border: '1px solid var(--glass-border)', overflow: 'hidden', background: 'var(--panel-card)', padding: '1.5rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: '1.5rem', color: 'var(--text-main)' }}>Lista de Deudores</h3>
-                  <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                    <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--panel-border)', opacity: 0.6 }}>
-                          <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 800 }}>ALUMNO</th>
-                          <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 800 }}>CUOTA</th>
-                          <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 800 }}>ACCIÓN</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {students.filter(s => !s.isPaid).map(s => (
-                          <tr key={s.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                            <td style={{ padding: '1rem', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.85rem' }}>{s.name}</td>
-                            <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatCLP(s.monthlyFee || 0)}</td>
-                            <td style={{ padding: '1rem', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'center' }}>
-                                <input 
-                                  type="date" 
-                                  defaultValue={new Date().toISOString().split('T')[0]}
-                                  onChange={(e) => setManualPaymentDates(prev => ({ ...prev, [s.id]: e.target.value }))}
-                                  style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--glass-border)', fontSize: '0.7rem', background: 'transparent', color: 'var(--text-main)', outline: 'none' }}
-                                />
-                                <button onClick={() => {
-                                  const customDate = manualPaymentDates[s.id];
-                                  handleManualPayment(s.id, customDate);
-                                  alert(`Pago registrado el ${customDate || 'hoy'} para ${s.name}`);
-                                }} style={{ background: 'rgba(5,168,106,0.1)', border: 'none', color: 'var(--logo-green)', padding: '0.5rem 0.8rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}>Registrar</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table></div>
-                  </div>
-                </div>
-              </div>
+              <PaymentsPanel
+                students={students}
+                fees={fees}
+                automation={automation}
+                formatCLP={formatCLP}
+                onSaveFees={(next) => { setFees(next); handleSaveFees(next); }}
+                onSaveAutomation={(next) => { setAutomation(next); handleSaveAutomation(next); }}
+                onRegisterPayment={(id, date) => handleManualPayment(id, date)}
+              />
             </motion.div>
           )}
 
           {activeTab === 'website' && (
-            <motion.div key="website" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(350px, 1fr) 2fr', gap: '2.5rem' }}>
-              {/* Manage Hero Videos */}
+            <motion.div key="website" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+              <section className="dp-card">
+                <div className="dp-head">
+                  <div>
+                    <div className="dp-kicker">Sitio web</div>
+                    <h2>{webTab === 'hero' ? 'Portada' : webTab === 'news' ? 'Noticias' : 'Galería'}</h2>
+                    <p className="dp-lead">Diseñado a medida de tu academia. Mostramos todo lo que necesites, manteniendo tu identidad.</p>
+                  </div>
+                </div>
+                <PanelTabs
+                  name="sitio"
+                  value={webTab}
+                  onChange={(id) => setWebTab(id as typeof webTab)}
+                  items={[
+                    { id: 'hero', label: 'Portada' },
+                    { id: 'news', label: 'Noticias' },
+                    { id: 'gallery', label: 'Galería' },
+                  ]}
+                />
+                <div className="dp-body">
+              {webTab === 'hero' && (
               <div className="glass" style={{ padding: '2.5rem', borderRadius: '2.5rem', background: 'var(--panel-card)', border: '1px solid var(--panel-border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 900 }}>Hero Videos <br/><span style={{ fontSize: '0.7rem', opacity: 0.5 }}>(Slider Principal)</span></h3>
@@ -4554,17 +3674,14 @@ const App: React.FC = () => {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1.2rem', border: '1px solid var(--panel-border)' }}>
                       <div style={{ width: '60px', height: '40px', background: '#000', borderRadius: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={14} /></div>
                       <div style={{ flex: 1, fontSize: '0.75rem', color: 'var(--panel-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.split('/').pop()}</div>
-                      <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.5rem' }} onClick={() => {
-                        const updated = liveHeroVideos.filter((_, idx) => idx !== i);
-                        setLiveHeroVideos(updated);
-                        syncWebsite('hero-videos', updated);
-                      }}><X size={16} /></button>
+                      <button style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.5rem' }} onClick={() => demoAlert('website')}><X size={16} /></button>
                     </div>
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* Manage News */}
+              {webTab === 'news' && (
               <div className="glass" style={{ padding: '2.5rem', borderRadius: '2.5rem', background: 'var(--panel-card)', border: '1px solid var(--panel-border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 900 }}>Noticias <br/><span style={{ fontSize: '0.7rem', opacity: 0.5 }}>(Slider Diario)</span></h3>
@@ -4581,7 +3698,7 @@ const App: React.FC = () => {
                     setIsAddingNews(true);
                   }}><Plus size={14}/> Nueva Noticia</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: '1.5rem' }}>
                   {liveNews.map((news, i) => (
                     <div key={i} style={{ display: 'flex', gap: '1.2rem', background: 'rgba(255,255,255,0.03)', padding: '1.2rem', borderRadius: '1.5rem', border: '1px solid var(--panel-border)', position: 'relative' }}>
                       <img src={news.img} style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '0.8rem' }} />
@@ -4590,53 +3707,62 @@ const App: React.FC = () => {
                         <div style={{ fontSize: '0.7rem', color: 'var(--panel-muted)' }}>{news.date}</div>
                         <div style={{ fontSize: '0.65rem', color: 'var(--logo-green)', fontWeight: 900, marginTop: '0.4rem' }}>{news.label}</div>
                       </div>
-                      <button style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', background: 'rgba(239,68,68,0.1)', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem' }} onClick={() => {
-                        const updated = liveNews.filter((_, idx) => idx !== i);
-                        setLiveNews(updated);
-                        syncWebsite('news', updated);
-                      }}><X size={14} /></button>
+                      <button style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', background: 'rgba(148,163,184,0.15)', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem' }} onClick={() => demoAlert('website')}><X size={14} /></button>
                     </div>
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* Manage Gallery */}
-              <div className="glass" style={{ gridColumn: 'span 2', padding: '2.5rem', borderRadius: '2.5rem', background: 'var(--panel-card)', border: '1px solid var(--panel-border)', marginTop: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+              {webTab === 'gallery' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '0.8rem', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 900 }}>Galería de Fotos <br/><span style={{ fontSize: '0.7rem', opacity: 0.5 }}>(Mosaico de Inicio)</span></h3>
                   <button className="btn-primary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.7rem', background: 'var(--logo-green)' }} onClick={() => {
                     setNewGalleryData({ img: '', size: 'small' });
                     setIsAddingGallery(true);
                   }}><Plus size={14}/> Nueva Foto</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 160px), 1fr))', gap: '1.5rem' }}>
                   {liveGallery.map((photo, i) => (
                     <div key={i} style={{ position: 'relative', borderRadius: '1.5rem', overflow: 'hidden', border: '1px solid var(--panel-border)', height: '180px' }}>
                       <img src={photo.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', display: 'flex', gap: '0.4rem' }}>
                         <div style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '0.3rem 0.6rem', borderRadius: '0.6rem', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase' }}>{photo.size}</div>
-                        <button style={{ background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => {
-                          const updated = liveGallery.filter((_, idx) => idx !== i);
-                          setLiveGallery(updated);
-                          syncWebsite('gallery', updated);
-                        }}><X size={14} /></button>
+                        <button style={{ background: '#e2e8f0', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => demoAlert('website')}><X size={14} /></button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
+              )}
+                </div>
+              </section>
             </motion.div>
           )}
 
           {activeTab === 'settings' && (
-            <motion.div key="settings" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="grid-layout" style={{ gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '3rem' }}>
-              <section className="glass" style={{ padding: '3.5rem', borderRadius: '3.5rem', border: '1px solid var(--glass-border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-                  <DollarSign size={24} color="var(--logo-green)" />
-                  <h3 style={{ fontSize: '1.8rem', fontWeight: 900 }}>Mensualidades</h3>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            <motion.div key="settings" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}>
+              <section className="dp-card">
+                <div className="dp-head">
                   <div>
+                    <div className="dp-kicker">Ajustes</div>
+                    <h2>{settingsTab === 'ninos' ? 'Planes kids' : settingsTab === 'adultos' ? 'Planes adultos' : 'Claves y avisos'}</h2>
+                  </div>
+                </div>
+                <PanelTabs
+                  name="ajustes"
+                  value={settingsTab}
+                  onChange={(id) => setSettingsTab(id as typeof settingsTab)}
+                  items={[
+                    { id: 'ninos', label: 'Kids' },
+                    { id: 'adultos', label: 'Adultos' },
+                    { id: 'claves', label: 'Claves' },
+                  ]}
+                />
+                <div className="dp-body">
+              {settingsTab === 'ninos' && (
+                <div>
                     <h4 style={{ fontWeight: 900, marginBottom: '1.5rem', color: 'var(--logo-green)', letterSpacing: '0.1em', fontSize: '0.85rem' }}>NIÑOS (Sub 18)</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {Object.keys(fees.kids).map(planKey => (
@@ -4658,8 +3784,11 @@ const App: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
-                  <div>
+                </div>
+              )}
+
+              {settingsTab === 'adultos' && (
+                <div>
                     <h4 style={{ fontWeight: 900, marginBottom: '1.5rem', color: 'var(--logo-green)', letterSpacing: '0.1em', fontSize: '0.85rem' }}>ADULTOS</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {Object.keys(fees.adults).map(planKey => (
@@ -4681,15 +3810,10 @@ const App: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
                 </div>
-              </section>
+              )}
 
-              <section className="glass" style={{ padding: '3.5rem', borderRadius: '3.5rem', border: '1px solid var(--glass-border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-                  <Bell size={24} color="var(--logo-green)" />
-                  <h3 style={{ fontSize: '1.8rem', fontWeight: 900 }}>Comunicación</h3>
-                </div>
+              {settingsTab === 'claves' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '1rem', fontWeight: 800, fontSize: '0.8rem', color: 'var(--text-muted)' }}>DÍA DE COBRO (MENSUAL)</label>
@@ -4704,28 +3828,17 @@ const App: React.FC = () => {
                   <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '1.5rem', borderRadius: '2rem', borderColor: 'var(--logo-green)', color: 'var(--logo-green)' }} onClick={handleGeneratePasswordsForAll}>GENERAR CLAVES A ALUMNOS ANTIGUOS</button>
                   <button className="btn-primary" style={{ width: '100%', background: '#111', color: '#fff', border: '1px solid #333', justifyContent: 'center', padding: '1.2rem', borderRadius: '2rem' }} onClick={() => handleSendCredentialsByEmail('ALL')}>SOLO ENVIAR CREDENCIALES POR EMAIL (SIN NOTIFICACIÓN)</button>
                 </div>
+              )}
+                </div>
               </section>
             </motion.div>
           )}
         </AnimatePresence>
+        </ModuleBoundary>
       </main >
 
       {/* Admin Modals */}
       <AnimatePresence>
-        {
-          showQRModal && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(30px)' }} onClick={() => setShowQRModal(false)}>
-              <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="glass" style={{ padding: isMobile ? '2.5rem 2rem' : '5rem', borderRadius: isMobile ? '2.5rem' : '4rem', width: '100%', maxWidth: '480px', textAlign: 'center', background: 'white', border: '1px solid var(--glass-border)', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-                <h2 style={{ color: '#111', fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: 900, marginBottom: '2rem' }}>Acceso Tatami</h2>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
-                  <QRCode value="CLASS_CHECKIN_2024" size={isMobile ? 220 : 360} style={{ width: '100%', height: 'auto', maxWidth: isMobile ? '220px' : '360px' }} />
-                </div>
-                <button className="btn-primary" style={{ marginTop: isMobile ? '2rem' : '3rem', width: '100%', justifyContent: 'center' }} onClick={() => setShowQRModal(false)}>CERRAR</button>
-              </motion.div>
-            </motion.div>
-          )
-        }
-
         {
           isAddingStudent && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(10px)' }}>
@@ -4827,7 +3940,7 @@ const App: React.FC = () => {
                       {formatCLP(Math.round(newStudentData.monthlyFee * (1 - (newStudentData.discountPercentage || 0) / 100)))}
                     </span>
                   </div>
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ marginTop: '0.5rem', width: '100%', padding: '1.4rem', background: 'var(--logo-green)', color: '#fff', fontSize: '0.9rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 900, borderRadius: '1.2rem', border: 'none', cursor: 'pointer', boxShadow: '0 15px 30px rgba(5,168,106,0.3)' }} onClick={handleAddStudent}>REGISTRAR EN EL DOJO</motion.button>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ marginTop: '0.5rem', width: '100%', padding: '1.4rem', background: 'var(--logo-green)', color: '#fff', fontSize: '0.9rem', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 900, borderRadius: '1.2rem', border: 'none', cursor: 'pointer', boxShadow: '0 15px 30px rgba(22,196,122,0.3)' }} onClick={handleAddStudent}>REGISTRAR EN EL DOJO</motion.button>
                 </div>
               </motion.div>
             </motion.div>
@@ -4852,576 +3965,48 @@ const App: React.FC = () => {
 
         {
           selectedStudent && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{
-                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                background: isMobile ? 'rgba(0,0,0,0.85)' : 'rgba(15,23,42,0.4)',
-                zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: isMobile ? '0.5rem' : '2rem',
-                backdropFilter: isMobile ? 'none' : 'blur(8px)',
-                WebkitBackdropFilter: isMobile ? 'none' : 'blur(8px)',
-                touchAction: 'none'
+            <StudentFile
+              student={selectedStudent}
+              isMobile={isMobile}
+              role={role}
+              sedes={sedes}
+              beltLabels={beltLabels}
+              planLabels={planLabels}
+              isGeneratingPayment={isGeneratingPayment}
+              weekStart={getWeekStart(new Date())}
+              avatarUrl={studentPhoto(selectedStudent)}
+              formatCLP={formatCLP}
+              formatDate={formatDate}
+              calculateAge={calculateAge}
+              onClose={() => { setSelectedStudent(null); setIsEditingStudent(false); }}
+              onSave={(draft) => handleUpdateStudent(draft)}
+              onChangePhoto={() => handleAdminUploadAvatar(selectedStudent)}
+              onViewPhoto={() => {
+                setPhotoLightboxStudent(selectedStudent);
               }}
-              onClick={() => setSelectedStudent(null)}>
-              <motion.div style={{
-                width: '100%', maxWidth: '750px',
-                maxHeight: isMobile ? '92vh' : '90vh',
-                overflowY: 'auto',
-                WebkitOverflowScrolling: 'touch',
-                overscrollBehavior: 'contain',
-                padding: isMobile ? '1.5rem' : '2.5rem',
-                borderRadius: isMobile ? '1.5rem' : '3rem',
-                background: '#fff',
-                border: '1px solid var(--panel-border)',
-                boxShadow: '0 40px 100px -20px rgba(0,0,0,0.25)',
-                position: 'relative'
+              onAddFamily={() => {
+                setNewStudentData({ name: '', email: selectedStudent.email || '', phone: selectedStudent.phone || '', birthDate: '', documentId: '', belt: 'WHITE', plan: selectedStudent.plan ? selectedStudent.plan.toString() : '3', monthlyFee: selectedStudent.monthlyFee || 40000, discountCategory: '', discountPercentage: 0, sedeId: selectedStudent.sedeId?.toString() || selectedStudent.sede_id?.toString() || '' });
+                setSelectedStudent(null);
+                setIsAddingStudent(true);
               }}
-                onClick={e => e.stopPropagation()}>
-                {/* Decorative Background Element */}
-                <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '300px', height: '300px', background: 'var(--logo-green-soft)', borderRadius: '50%', filter: 'blur(60px)', zIndex: 0 }} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', position: 'relative', zIndex: 1, flexWrap: 'wrap', gap: '1.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: 1, minWidth: isMobile ? '100%' : '300px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <div
-                        className="strict-avatar-container"
-                        style={{ width: '100px', height: '100px', borderRadius: '2.5rem', background: 'var(--panel-surface)', border: '2px solid var(--panel-border)', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', cursor: 'pointer' }}
-                        onClick={() => setPhotoLightboxStudent(selectedStudent)}
-                        title="Ver foto en grande"
-                      >
-                        <img
-                          src={selectedStudent.avatar ? (selectedStudent.avatar.startsWith('http') || selectedStudent.avatar.startsWith('data:') ? selectedStudent.avatar : `${API_URL}${selectedStudent.avatar}`) : getFallbackAvatarUrl(selectedStudent.name)}
-                          onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(selectedStudent.name); }}
-                        />
-                      </div>
-                      {/* Admin-only photo action buttons */}
-                      {(role === 'superadmin' || role === 'admin') && (
-                        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.5rem', justifyContent: 'center' }}>
-                          <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            title="Ver foto en grande"
-                            onClick={() => setPhotoLightboxStudent(selectedStudent)}
-                            style={{ background: 'rgba(5,168,106,0.12)', border: '1px solid rgba(5,168,106,0.3)', borderRadius: '0.5rem', padding: '0.25rem 0.5rem', color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}
-                          >
-                            <ImageIcon size={10} /> Ver
-                          </motion.button>
-                          <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            title="Cambiar foto de perfil"
-                            onClick={() => handleAdminUploadAvatar(selectedStudent)}
-                            style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '0.5rem', padding: '0.25rem 0.5rem', color: '#6366f1', fontSize: '0.6rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem', whiteSpace: 'nowrap' }}
-                          >
-                            <Camera size={10} /> Cambiar
-                          </motion.button>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: '0.8rem' }}>{isEditingStudent ? 'Editando Perfil' : 'Ficha del Alumno'}</div>
-                      {isEditingStudent ? (
-                        <input
-                          style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--panel-text)', letterSpacing: '-2px', border: 'none', borderBottom: '2px solid var(--logo-green)', outline: 'none', width: '100%', background: 'transparent', textTransform: 'capitalize' }}
-                          value={editedStudent?.name || ''}
-                          onChange={e => setEditedStudent(prev => prev ? { ...prev, name: e.target.value } : null)}
-                        />
-                      ) : (
-                        <h1 style={{ fontSize: '3rem', fontWeight: 900, color: 'var(--panel-text)', letterSpacing: '-2px', textTransform: 'capitalize', lineHeight: 1.1 }}>{selectedStudent.name}</h1>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    {!isEditingStudent ? (
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          style={{ background: 'rgba(5,168,106,0.1)', border: '1px solid rgba(5,168,106,0.3)', borderRadius: '1rem', padding: '0.8rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', color: 'var(--logo-green)', fontWeight: 900, fontSize: '0.8rem' }}
-                          onClick={() => {
-                            setNewStudentData({ name: '', email: selectedStudent.email || '', phone: selectedStudent.phone || '', birthDate: '', documentId: '', belt: 'WHITE', plan: selectedStudent.plan ? selectedStudent.plan.toString() : '3', monthlyFee: selectedStudent.monthlyFee || 40000, discountCategory: '', discountPercentage: 0, sedeId: selectedStudent.sedeId?.toString() || selectedStudent.sede_id?.toString() || '' });
-                            setSelectedStudent(null);
-                            setIsAddingStudent(true);
-                          }}
-                          title="Crear un alumno nuevo que comparte el mismo email y acceso a este panel"
-                        >
-                          <Users size={16} /> AÑADIR FAMILIAR
-                        </motion.button>
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1rem', padding: '0.8rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', color: 'var(--panel-text)', fontWeight: 800, fontSize: '0.8rem' }}
-                          onClick={() => {
-                            setEditedStudent({ ...selectedStudent });
-                            setIsEditingStudent(true);
-                          }}>
-                          <Edit2 size={16} /> EDITAR
-                        </motion.button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '0.8rem' }}>
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1rem', padding: '0.8rem 1.5rem', cursor: 'pointer', color: 'var(--panel-muted)', fontWeight: 800, fontSize: '0.8rem' }}
-                          onClick={() => setIsEditingStudent(false)}>
-                          CANCELAR
-                        </motion.button>
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          style={{ background: 'var(--logo-green)', border: 'none', borderRadius: '1rem', padding: '0.8rem 1.5rem', cursor: 'pointer', color: '#fff', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}
-                          onClick={() => editedStudent && handleUpdateStudent(editedStudent)}>
-                          <Save size={16} /> GUARDAR
-                        </motion.button>
-                      </div>
-                    )}
-                    <motion.button whileHover={{ rotate: 90, scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                      style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--panel-muted)' }}
-                      onClick={() => { setSelectedStudent(null); setIsEditingStudent(false); }}>
-                      <X size={24} />
-                    </motion.button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1rem', position: 'relative', zIndex: 1 }}>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>CONTACTO PERSONAL</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', width: '100%', alignItems: 'center' }}>
-                      {isEditingStudent ? (
-                        <>
-                          <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.email || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, email: e.target.value } : null)} placeholder="Email" />
-                          <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.phone || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, phone: e.target.value } : null)} placeholder="Teléfono" />
-                          <input type="date" style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.birthDate || ''} title="Fecha Nacimiento" onChange={e => setEditedStudent(prev => prev ? { ...prev, birthDate: e.target.value } : null)} />
-                        </>
-                      ) : (
-                        <>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)', wordBreak: 'break-all' }}>{selectedStudent.email}</p>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)' }}>{selectedStudent.phone}</p>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)' }}>{selectedStudent.birthDate ? `${selectedStudent.birthDate} (${calculateAge(selectedStudent.birthDate)} años)` : 'No registrada'}</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>TUTOR</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', width: '100%', alignItems: 'center' }}>
-                      {isEditingStudent ? (
-                        <>
-                          <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.tutorName || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, tutorName: e.target.value } : null)} placeholder="Nombre y Apellido" />
-                          <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.tutorEmail || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, tutorEmail: e.target.value } : null)} placeholder="Correo Tutor" />
-                          <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.9rem', width: '100%', textAlign: 'center' }} value={editedStudent?.tutorPhone || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, tutorPhone: e.target.value } : null)} placeholder="Teléfono Tutor" />
-                        </>
-                      ) : (
-                        <>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)' }}>{selectedStudent.tutorName || 'Sin tutor'}</p>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)', wordBreak: 'break-all' }}>{selectedStudent.tutorEmail || 'Sin email'}</p>
-                          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--panel-muted)' }}>{selectedStudent.tutorPhone || 'Sin teléfono'}</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1rem', position: 'relative', zIndex: 1 }}>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: selectedStudent.isPaid ? 'var(--panel-green-bg)' : 'var(--panel-red-bg)', border: `1px solid ${selectedStudent.isPaid ? 'var(--panel-green-border)' : 'var(--panel-red-border)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: selectedStudent.isPaid ? 'var(--logo-green)' : '#ef4444', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>ESTADO COMERCIAL</p>
-                    {isEditingStudent ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', width: '100%', alignItems: 'center' }}>
-                        <select
-                          style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 900, fontSize: '1rem', color: editedStudent?.isPaid ? 'var(--logo-green)' : '#ef4444', width: '100%', textAlign: 'center' }}
-                          value={editedStudent?.isPaid ? 'true' : 'false'}
-                          onChange={e => setEditedStudent(prev => prev ? { ...prev, isPaid: e.target.value === 'true' } : null)}
-                        >
-                          <option value="true">✅ AL DÍA</option>
-                          <option value="false">⚠️ PENDIENTE</option>
-                        </select>
-                        <input style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.75rem', width: '100%', textAlign: 'center' }} value={editedStudent?.lastPaymentDate || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, lastPaymentDate: e.target.value } : null)} placeholder="Último Pago" />
-                      </div>
-                    ) : (
-                      <>
-                        <p style={{ fontWeight: 900, fontSize: '1.2rem', color: selectedStudent.isPaid ? 'var(--logo-green)' : '#ef4444', marginBottom: '0.4rem' }}>{selectedStudent.isPaid ? '✅ AL DÍA' : '⚠️ PENDIENTE'}</p>
-                        <p style={{ fontWeight: 700, fontSize: '0.75rem', color: selectedStudent.isPaid ? 'var(--logo-green)' : '#ef4444', opacity: 0.7 }}>Último pago: {formatDate(selectedStudent.lastPaymentDate)}</p>
-                      </>
-                    )}
-                  </div>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>CINTURÓN</p>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {isEditingStudent ? (
-                        <select
-                          className={`belt-badge belt-${editedStudent?.belt || 'WHITE'}`}
-                          style={{ padding: '0.6rem 1.8rem', fontSize: '0.8rem', background: '#fff', textAlign: 'center' }}
-                          value={editedStudent?.belt}
-                          onChange={e => setEditedStudent(prev => prev ? { ...prev, belt: e.target.value as Belt } : null)}
-                        >
-                          {Object.keys(beltLabels).map(b => <option key={b} value={b}>{beltLabels[b as Belt]}</option>)}
-                        </select>
-                      ) : (
-                        <div className={`belt-badge belt-${selectedStudent.belt}`} style={{ padding: '0.6rem 1.8rem', fontSize: '0.8rem' }}>{beltLabels[selectedStudent.belt]}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', position: 'relative', zIndex: 1 }}>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>PLAN ACTUAL</p>
-                    {isEditingStudent ? (
-                      <select style={{ width: '100%', background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 900, fontSize: '1rem', textAlign: 'center' }}
-                        value={editedStudent?.plan || 'Clase Individual'}
-                        onChange={e => {
-                          const val = e.target.value;
-                          const feeMap: Record<string, number> = {
-                            "Clase Individual": 5000,
-                            "1x Semana": 20000,
-                            "2x Semana": 35000,
-                            "3x Semana": 40000,
-                            "4x Semana": 45000,
-                            "Full Rana": 50000
-                          };
-                          setEditedStudent(prev => prev ? { ...prev, plan: val, monthlyFee: feeMap[val] || prev.monthlyFee } : null);
-                        }}>
-                        <option value="Clase Individual">Clase Individual ($5.000)</option>
-                        <option value="1x Semana">1x Semana ($20.000)</option>
-                        <option value="2x Semana">2x Semana ($35.000)</option>
-                        <option value="3x Semana">3x Semana ($40.000)</option>
-                        <option value="4x Semana">4x Semana ($45.000)</option>
-                        <option value="Full Rana">Full Rana ($50.000)</option>
-                      </select>
-                    ) : (
-                      <p style={{ fontWeight: 900, fontSize: '1.1rem', color: 'var(--panel-text)' }}>{selectedStudent.plan ? (planLabels[selectedStudent.plan.toString()] || selectedStudent.plan) : 'No asignado'}</p>
-                    )}
-                  </div>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>MENSUALIDAD</p>
-                    {isEditingStudent ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                        <span style={{ fontWeight: 900, color: 'var(--logo-green)' }}>$</span>
-                        <input type="number" style={{ width: '100px', background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 900, fontSize: '1.4rem', textAlign: 'center' }} value={editedStudent?.monthlyFee || 0} onChange={e => setEditedStudent(prev => prev ? { ...prev, monthlyFee: parseInt(e.target.value) } : null)} />
-                      </div>
-                    ) : (
-                      <p style={{ fontWeight: 900, fontSize: '1.4rem', color: 'var(--logo-green)' }}>{formatCLP(selectedStudent.monthlyFee || 0)}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Sede (Solo Super-Admin) ── */}
-                {role === 'superadmin' && sedes.length > 0 && (
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center', marginBottom: '1rem', position: 'relative', zIndex: 1 }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>SEDE</p>
-                    {isEditingStudent ? (
-                      <select
-                        style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.85rem', width: '200px', textAlign: 'center', outline: 'none', cursor: 'pointer' }}
-                        value={editedStudent?.sedeId || editedStudent?.sede_id || ''}
-                        onChange={e => setEditedStudent(prev => prev ? { ...prev, sedeId: Number(e.target.value), sede_id: Number(e.target.value) } : null)}
-                      >
-                        <option value="">Seleccionar Sede...</option>
-                        {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    ) : (
-                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--panel-text)' }}>
-                        {sedes.find(s => s.id === (selectedStudent.sedeId || selectedStudent.sede_id))?.name || '—'}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Fecha de Ingreso / Último Grado / Graduación ── */}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', position: 'relative', zIndex: 1 }}>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>FECHA DE INGRESO</p>
-                    {isEditingStudent ? (
-                      <input type="date" style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.85rem', width: '100%', textAlign: 'center' }} value={editedStudent?.joinDate || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, joinDate: e.target.value } : null)} title="Fecha de ingreso al Dojo" />
-                    ) : (
-                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--panel-text)' }}>{formatDate(selectedStudent.joinDate, 'long')}</p>
-                    )}
-                  </div>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>ÚLTIMO GRADO</p>
-                    {isEditingStudent ? (
-                      <select
-                        style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.85rem', width: '100%', textAlign: 'center', outline: 'none', cursor: 'pointer' }}
-                        value={editedStudent?.lastGrade || ''}
-                        onChange={e => setEditedStudent(prev => prev ? { ...prev, lastGrade: e.target.value } : null)}
-                      >
-                        <option value="">Seleccionar grado...</option>
-                        <option value="1er grado">1er grado</option>
-                        <option value="2do grado">2do grado</option>
-                        <option value="3er grado">3er grado</option>
-                        <option value="4to grado">4to grado</option>
-                      </select>
-                    ) : (
-                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--panel-text)' }}>{selectedStudent.lastGrade || '—'}</p>
-                    )}
-                  </div>
-                  <div style={{ padding: '1.2rem', borderRadius: '1.5rem', background: selectedStudent.graduationDate ? 'rgba(5,168,106,0.06)' : 'var(--panel-surface)', border: `1px solid ${selectedStudent.graduationDate ? 'rgba(5,168,106,0.25)' : 'var(--panel-border)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>FECHA DE GRADUACIÓN</p>
-                    {isEditingStudent ? (
-                      <input type="date" style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.85rem', width: '100%', textAlign: 'center' }} value={editedStudent?.graduationDate || ''} onChange={e => setEditedStudent(prev => prev ? { ...prev, graduationDate: e.target.value } : null)} title="Fecha de graduación del último grado" />
-                    ) : (
-                      <p style={{ fontWeight: 800, fontSize: '0.95rem', color: selectedStudent.graduationDate ? 'var(--logo-green)' : 'var(--panel-text)' }}>{formatDate(selectedStudent.graduationDate, 'long')}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── DATOS DE COMPETICIÓN Y CATEGORÍA IBJJF ── */}
-                {(() => {
-                  const currentStudentData = isEditingStudent ? editedStudent : selectedStudent;
-                  const cat = calculateIBJJFCategory(
-                    currentStudentData?.birthDate, 
-                    currentStudentData?.weight, 
-                    currentStudentData?.gender || null, 
-                    currentStudentData?.belt || 'WHITE'
-                  );
-
-                  return (
-                    <div style={{ marginBottom: '1.5rem', position: 'relative', zIndex: 1 }}>
-                      <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>
-                        🏆 INFORMACIÓN DE COMPETICIÓN (CATEGORÍA IBJJF)
-                      </p>
-
-                      {/* Grid responsivo con minmax */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.8rem', marginBottom: '1rem' }}>
-                        <div style={{ padding: '0.9rem 1rem', borderRadius: '1.2rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                          <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.4rem', letterSpacing: '0.1em' }}>FECHA NAC. / EDAD</p>
-                          {isEditingStudent ? (
-                            <input type="date" style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.4rem', fontWeight: 700, fontSize: '0.85rem', width: '100%', textAlign: 'center', boxSizing: 'border-box' }}
-                              value={editedStudent?.birthDate || ''}
-                              onChange={e => setEditedStudent(prev => prev ? { ...prev, birthDate: e.target.value } : null)} />
-                          ) : (
-                            <p style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--panel-text)' }}>
-                              {selectedStudent.birthDate ? `${formatDate(selectedStudent.birthDate)} (${cat.age} años)` : 'Sin registrar'}
-                            </p>
-                          )}
-                        </div>
-
-                        <div style={{ padding: '0.9rem 1rem', borderRadius: '1.2rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                          <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.4rem', letterSpacing: '0.1em' }}>PESO CON KIMONO</p>
-                          {isEditingStudent ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center', width: '100%' }}>
-                              <input type="number" step="0.1" min="20" max="200" placeholder="Ej: 75.5"
-                                style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.4rem', fontWeight: 700, fontSize: '0.85rem', width: '70px', textAlign: 'center', boxSizing: 'border-box' }}
-                                value={editedStudent?.weight || ''}
-                                onChange={e => setEditedStudent(prev => prev ? { ...prev, weight: parseFloat(e.target.value) || 0 } : null)} />
-                              <span style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--panel-text)' }}>kg</span>
-                            </div>
-                          ) : (
-                            <p style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--panel-text)' }}>
-                              {selectedStudent.weight ? `${selectedStudent.weight} kg` : 'Sin registrar'}
-                            </p>
-                          )}
-                        </div>
-
-                        <div style={{ padding: '0.9rem 1rem', borderRadius: '1.2rem', background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                          <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.4rem', letterSpacing: '0.1em' }}>GÉNERO</p>
-                          {isEditingStudent ? (
-                            <select style={{ background: '#fff', border: '1px solid var(--panel-border)', borderRadius: '0.5rem', padding: '0.4rem', fontWeight: 700, fontSize: '0.85rem', width: '100%', textAlign: 'center', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
-                              value={editedStudent?.gender || ''}
-                              onChange={e => setEditedStudent(prev => prev ? { ...prev, gender: e.target.value as 'MALE' | 'FEMALE' } : null)}>
-                              <option value="">Seleccionar...</option>
-                              <option value="MALE">Masculino</option>
-                              <option value="FEMALE">Femenino</option>
-                            </select>
-                          ) : (
-                            <p style={{ fontWeight: 800, fontSize: '0.85rem', color: selectedStudent.gender ? 'var(--panel-text)' : 'var(--panel-muted)' }}>
-                              {selectedStudent.gender === 'FEMALE' ? 'Femenino' : selectedStudent.gender === 'MALE' ? 'Masculino' : 'Sin registrar'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Tarjeta de Categoría Oficial IBJJF */}
-                      <div style={{ 
-                        background: 'linear-gradient(135deg, rgba(5,168,106,0.1), rgba(5,168,106,0.03))', 
-                        border: '1.5px solid rgba(5,168,106,0.25)', 
-                        borderRadius: '1.2rem', 
-                        padding: '1.2rem' 
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                            🏆 CATEGORÍA OFICIAL IBJJF (CON KIMONO)
-                          </span>
-                          <span style={{ fontSize: '0.6rem', fontWeight: 800, background: 'rgba(5,168,106,0.15)', color: 'var(--logo-green)', padding: '0.2rem 0.6rem', borderRadius: '100px', border: '1px solid rgba(5,168,106,0.3)' }}>
-                            Estándar Gi
-                          </span>
-                        </div>
-
-                        {cat.hasGender && cat.divisionName !== 'Pendiente de peso' && cat.divisionName !== 'Por definir género' ? (
-                          <div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--panel-text)', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <span>{cat.divisionName}</span>
-                              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--logo-green)', background: 'rgba(5,168,106,0.12)', padding: '0.15rem 0.55rem', borderRadius: '0.5rem' }}>
-                                {cat.weightLimitText}
-                              </span>
-                            </div>
-
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                              <span style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', padding: '0.3rem 0.6rem', borderRadius: '0.6rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-text)' }}>
-                                👤 {cat.ageCategory}
-                              </span>
-                              <span style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', padding: '0.3rem 0.6rem', borderRadius: '0.6rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-text)' }}>
-                                🚻 {cat.genderText}
-                              </span>
-                              <span style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', padding: '0.3rem 0.6rem', borderRadius: '0.6rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-text)' }}>
-                                🥋 {cat.beltName}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ padding: '0.8rem 1rem', background: 'var(--panel-surface)', borderRadius: '0.8rem', border: '1px dashed var(--panel-border)', textAlign: 'center' }}>
-                            <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: 'var(--panel-text)', marginBottom: '0.2rem' }}>
-                              {!cat.hasGender ? '⚠️ Por favor selecciona el Género del alumno' : '⚠️ Por favor ingresa el Peso en kg del alumno'}
-                            </p>
-                            <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--panel-muted)', fontWeight: 600 }}>
-                              Para calcular su categoría de torneo (Galo, Pluma, Pena, Leve, Médio, etc.)
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div style={{ marginBottom: '1.5rem', position: 'relative', zIndex: 1 }}>
-                  <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>CLASES SELECCIONADAS ESTA SEMANA</p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-                    {(selectedStudent.scheduledClasses || [])
-                      .filter(sc => sc.timestamp >= getWeekStart(new Date()))
-                      .map((sc, idx) => (
-                        <div key={idx} style={{ background: 'var(--panel-green-bg)', border: '1px solid var(--panel-green-border)', padding: '0.8rem 1rem', borderRadius: '1rem', flex: isMobile ? '1 1 100%' : 'none' }}>
-                           <div style={{ fontSize: '0.65rem', fontWeight: 900, color: 'var(--logo-green)', textTransform: 'uppercase', marginBottom: '0.2rem' }}>{sc.day}</div>
-                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--panel-text)' }}>{sc.time} - {sc.name}</div>
-                        </div>
-                      ))}
-                    {!(selectedStudent.scheduledClasses || []).some(sc => sc.timestamp >= getWeekStart(new Date())) && (
-                      <div style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', padding: '1rem', borderRadius: '1rem', width: '100%', textAlign: 'center', fontSize: '0.8rem', color: 'var(--panel-muted)', fontWeight: 600 }}>
-                        No tiene clases seleccionadas para esta semana.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '1.5rem', position: 'relative', zIndex: 1 }}>
-                  <p style={{ color: 'var(--logo-green)', fontSize: '0.6rem', fontWeight: 900, marginBottom: '0.8rem', letterSpacing: '0.15em' }}>HISTORIAL DE PAGOS</p>
-                  <div style={{ background: 'var(--panel-surface)', border: '1px solid var(--panel-border)', borderRadius: '1.5rem', overflow: 'hidden' }}>
-                    {selectedStudent.history && selectedStudent.history.length > 0 ? (
-                      <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}><div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ background: 'rgba(5,168,106,0.05)', borderBottom: '1px solid var(--panel-border)' }}>
-                            <th style={{ padding: '0.5rem 1rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-muted)' }}>FECHA</th>
-                            <th style={{ padding: '0.5rem 1rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-muted)' }}>MONTO</th>
-                            <th style={{ padding: '0.5rem 1rem', fontSize: '0.7rem', fontWeight: 800, color: 'var(--panel-muted)' }}>ESTADO</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedStudent.history.map((record, idx) => (
-                            <tr key={idx} style={{ borderBottom: idx === selectedStudent.history.length - 1 ? 'none' : '1px solid var(--panel-border)' }}>
-                              <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 600 }}>{formatDate(record.date)}</td>
-                              <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 800, color: 'var(--panel-text)' }}>{formatCLP(record.amount)}</td>
-                              <td style={{ padding: '1rem 1.5rem' }}>
-                                <span style={{ display: 'inline-block', padding: '0.3rem 0.8rem', borderRadius: '100px', fontSize: '0.7rem', fontWeight: 800, background: record.status === 'Completado' ? 'rgba(37,211,102,0.1)' : 'rgba(239,68,68,0.1)', color: record.status === 'Completado' ? '#25D366' : '#ef4444' }}>
-                                  {record.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table></div></div>
-                    ) : (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--panel-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
-                        No hay pagos registrados aún en el sistema. Al sincronizar con Mercado Pago aparecerán aquí.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {(role === 'admin' || role === 'superadmin' || role !== 'student') && (
-                  <motion.button whileHover={{ y: -3, boxShadow: '0 10px 25px rgba(34,197,94,0.2)' }} whileTap={{ scale: 0.98 }}
-                    style={{ background: '#05a86a', color: '#fff', border: 'none', padding: '1.2rem', borderRadius: '1rem', fontWeight: 900, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem', width: '100%', marginBottom: '1rem', position: 'relative', zIndex: 1 }}
-                    onClick={() => {
-                       if (!window.confirm(`¿Registrar pago manual de ${selectedStudent.name} por ${formatCLP(selectedStudent.monthlyFee || 0)}?`)) return;
-                       const todayStr = new Date().toISOString().split('T')[0];
-                       const updated = { 
-                           ...selectedStudent, 
-                           isPaid: true, 
-                           lastPaymentDate: todayStr,
-                           lastPaymentMonth: todayStr.substring(0, 7),
-                           history: [
-                               ...(selectedStudent.history || []),
-                               { date: todayStr, status: 'Completado' as const, amount: selectedStudent.monthlyFee || 0, method: 'Manual/Transferencia' }
-                           ]
-                       };
-                       handleUpdateStudent(updated);
-                    }}>
-                    <DollarSign size={18} /> REGISTRAR PAGO MANUAL (EFECTIVO / TRANSFERENCIA)
-                  </motion.button>
-                )}
-
-                <div style={{ display: 'flex', gap: '1rem', position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
-                    {!selectedStudent.isPaid && (
-                      <motion.button 
-                        whileHover={{ y: -4, boxShadow: '0 15px 30px rgba(0,157,255,0.2)' }} 
-                        whileTap={{ scale: 0.98 }}
-                        disabled={isGeneratingPayment}
-                        style={{ 
-                          flex: 1, 
-                          background: isGeneratingPayment ? '#94a3b8' : '#009EE3', 
-                          color: '#fff', 
-                          border: 'none', 
-                          padding: '1.2rem', 
-                          borderRadius: '1rem', 
-                          fontWeight: 900, 
-                          cursor: isGeneratingPayment ? 'not-allowed' : 'pointer', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          gap: '0.8rem',
-                          opacity: isGeneratingPayment ? 0.7 : 1,
-                          minWidth: isMobile ? '100%' : '200px'
-                        }}
-                        onClick={() => handleCreatePaymentLink(selectedStudent)}>
-                        {isGeneratingPayment ? (
-                          <><span className="premium-spinner" style={{ width: '16px', height: '16px', borderTopColor: '#fff', borderRightColor: 'rgba(255,255,255,0.6)' }} /> GENERANDO...</>
-                        ) : (
-                          <><CreditCard size={18} /> PAGAR CON MERCADO PAGO</>
-                        )}
-                      </motion.button>
-                    )}
-                    <motion.button whileHover={{ y: -4, boxShadow: '0 15px 30px rgba(37, 211, 102, 0.2)' }} whileTap={{ scale: 0.98 }}
-                      style={{ flex: 1, background: '#25D366', color: '#fff', border: 'none', padding: '1.2rem', borderRadius: '1rem', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem', minWidth: isMobile ? '100%' : '200px' }}
-                      onClick={() => window.open(`https://wa.me/${selectedStudent.phone.replace(/\D/g, '')}?text=Hola ${selectedStudent.name}...`)}>
-                      CONTACTAR POR WHATSAPP
-                    </motion.button>
-                    <motion.button whileHover={{ y: -4, boxShadow: '0 15px 30px rgba(0,0,0,0.1)' }} whileTap={{ scale: 0.98 }}
-                      style={{ flex: 1, background: 'var(--panel-text)', color: '#fff', border: 'none', padding: '1.2rem', borderRadius: '1rem', fontWeight: 900, cursor: 'pointer', minWidth: isMobile ? '100%' : '200px' }}
-                      onClick={() => handleSendPaymentReminder(selectedStudent)}>
-                      ENVIAR RECORDATORIO EMAIL
-                    </motion.button>
-                  </div>
-
-                  {(role === 'admin' || role === 'superadmin' || role !== 'student') && (
-                    <motion.button
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      style={{
-                        width: '100%',
-                        marginTop: '1.2rem',
-                        padding: '1.2rem',
-                        borderRadius: '1rem',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: '#ef4444',
-                        border: '1px solid rgba(239, 68, 68, 0.25)',
-                        fontWeight: 900,
-                        fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.6rem',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        zIndex: 1
-                      }}
-                      onClick={() => {
-                        if (window.confirm(`⚠️ ¿Estás seguro de que deseas eliminar permanentemente a ${selectedStudent.name}?\n\nEsta acción borrará su perfil y todo su historial de pagos.`)) {
-                          handleDeleteStudent(selectedStudent.id);
-                        }
-                      }}
-                    >
-                      <Trash2 size={18} /> ELIMINAR ALUMNO PERMANENTEMENTE
-                    </motion.button>
-                  )}
-              </motion.div>
-            </motion.div>
+              onCreatePaymentLink={() => handleCreatePaymentLink(selectedStudent)}
+              onSendReminder={() => handleSendPaymentReminder(selectedStudent)}
+              onDelete={() => handleDeleteStudent(selectedStudent.id)}
+              onManualPay={(draft) => {
+                if (!window.confirm(`¿Registrar pago manual de ${draft.name} por ${formatCLP(draft.monthlyFee || 0)}?`)) return;
+                const todayStr = new Date().toISOString().split('T')[0];
+                handleUpdateStudent({
+                  ...draft,
+                  isPaid: true,
+                  lastPaymentDate: todayStr,
+                  lastPaymentMonth: todayStr.substring(0, 7),
+                  history: [
+                    ...(draft.history || []),
+                    { date: todayStr, status: 'Completado' as const, amount: draft.monthlyFee || 0 }
+                  ]
+                });
+              }}
+            />
           )
         }
 
@@ -5490,7 +4075,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ marginTop: '0.5rem', width: '100%', padding: '1.2rem', background: 'var(--logo-green)', color: '#fff', fontSize: '0.9rem', letterSpacing: '0.05em', fontWeight: 900, borderRadius: '1.2rem', border: 'none', cursor: 'pointer', boxShadow: '0 15px 30px rgba(5,168,106,0.3)' }} onClick={handleAddVideo}>PUBLICAR TÉCNICA</motion.button>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ marginTop: '0.5rem', width: '100%', padding: '1.2rem', background: 'var(--logo-green)', color: '#fff', fontSize: '0.9rem', letterSpacing: '0.05em', fontWeight: 900, borderRadius: '1.2rem', border: 'none', cursor: 'pointer', boxShadow: '0 15px 30px rgba(22,196,122,0.3)' }} onClick={handleAddVideo}>PUBLICAR TÉCNICA</motion.button>
                 </div>
               </motion.div>
             </motion.div>
@@ -5508,7 +4093,7 @@ const App: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                   {newNewsData.img && (
                     <div style={{ width: '100%', height: '150px', borderRadius: '1.5rem', overflow: 'hidden', border: '2px solid var(--logo-green)', marginBottom: '0.5rem' }}>
-                      <img src={newNewsData.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" onError={(e) => (e.currentTarget.src = 'https://images.unsplash.com/photo-1552072047-54d19335391c?w=800')} />
+                      <img src={newNewsData.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" onError={(e) => (e.currentTarget.src = 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800')} />
                     </div>
                   )}
                   <div>
@@ -5658,7 +4243,7 @@ const App: React.FC = () => {
                     
                     <div style={{ background: '#eff6ff', borderRadius: '1rem', padding: '1.2rem', border: '1px solid #bfdbfe' }}>
                       <div style={{ fontSize: '0.7rem', fontWeight: 900, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <CreditCard size={15} /> PORTAL DE PAGOS SEGURO
+                        <MpLogo height={32} />
                       </div>
                       <p style={{ fontSize: '0.8rem', color: '#1e3a5f', lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
                         Este link permite procesar la mensualidad utilizando <b>cualquier método de pago</b>: transferencia bancaria, cuenta de Mercado Pago, o tarjetas de débito/crédito.
@@ -5692,11 +4277,11 @@ const App: React.FC = () => {
                     <button 
                       onClick={() => handleCreatePaymentLink(paymentModalTarget!)}
                       disabled={isGeneratingPayment}
-                      style={{ width: '100%', padding: '1.1rem', borderRadius: '1rem', border: 'none', background: isGeneratingPayment ? '#93c5fd' : '#009ee3', color: '#fff', fontWeight: 900, fontSize: '0.95rem', cursor: isGeneratingPayment ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', boxShadow: '0 10px 25px rgba(0,158,227,0.25)', transition: 'all 0.2s', marginBottom: '1.5rem' }}>
+                      style={{ width: '100%', padding: '1.05rem 1.1rem', borderRadius: '1rem', border: 'none', background: isGeneratingPayment ? '#3d2bb3' : '#0a0080', color: '#fff', fontWeight: 900, fontSize: '0.95rem', cursor: isGeneratingPayment ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: '0 10px 25px rgba(10,0,128,0.28)', transition: 'all 0.2s', marginBottom: '1.5rem' }}>
                       {isGeneratingPayment ? (
                         <><span className="premium-spinner" style={{ width: '16px', height: '16px', borderTopColor: '#fff', borderRightColor: 'rgba(255,255,255,0.6)' }} /> Redirigiendo a portal seguro...</>
                       ) : (
-                        <><CreditCard size={20} /> IR A MERCADO PAGO</>
+                        <MpLogo variant="white" height={34} />
                       )}
                     </button>
                   </motion.div>
@@ -5704,7 +4289,7 @@ const App: React.FC = () => {
                   {/* Footer note */}
                   <p style={{ fontSize: '0.6rem', color: '#94a3b8', textAlign: 'center', marginTop: '1rem', lineHeight: 1.4 }}>
                     Pagos procesados de forma segura. Ante cualquier duda,{' '}
-                    <a href="mailto:ranasjiujitsu@gmail.com" style={{ color: '#05a86a', fontWeight: 700 }}>contáctanos</a>.
+                    <a href="mailto:contacto@dpsistemas.cl" style={{ color: '#16C47A', fontWeight: 700 }}>contáctanos</a>.
                   </p>
                 </div>
               </motion.div>
@@ -5848,17 +4433,13 @@ const App: React.FC = () => {
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 260, damping: 22 }}
               onClick={e => e.stopPropagation()}
-              style={{ borderRadius: '50%', overflow: 'hidden', width: isMobile ? '260px' : '340px', height: isMobile ? '260px' : '340px', border: '4px solid rgba(5,168,106,0.7)', boxShadow: '0 0 60px rgba(5,168,106,0.25), 0 30px 80px rgba(0,0,0,0.6)', flexShrink: 0, background: '#1e293b' }}
+              style={{ borderRadius: '24px', overflow: 'hidden', width: isMobile ? '240px' : '300px', height: isMobile ? '240px' : '300px', border: '3px solid #006970', boxShadow: '0 30px 80px rgba(0,0,0,0.45)', flexShrink: 0, background: '#fff' }}
             >
               <img
-                src={photoLightboxStudent.avatar
-                  ? (photoLightboxStudent.avatar.startsWith('http') || photoLightboxStudent.avatar.startsWith('data:')
-                    ? photoLightboxStudent.avatar
-                    : `${API_URL}${photoLightboxStudent.avatar}`)
-                  : getFallbackAvatarUrl(photoLightboxStudent.name)}
-                onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(photoLightboxStudent.name); }}
+                src={studentPhoto(photoLightboxStudent)}
+                onError={(e) => { e.currentTarget.src = BRAND.mascotAvatar; }}
                 alt={photoLightboxStudent.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', display: 'block', background: '#fff' }}
               />
             </motion.div>
 
@@ -5880,6 +4461,9 @@ const App: React.FC = () => {
         )}
         
       </AnimatePresence>
+      <ModuleBoundary name="guia">
+        <DemoGuide mode="admin" moduleId={activeTab} onGo={(tab) => { setActiveTab(tab as any); setIsMobileMenuOpen(false); }} />
+      </ModuleBoundary>
     </motion.div>
   );
 };
@@ -5944,19 +4528,19 @@ const AcceptTermsModal: React.FC<{ student: Student, onAccept: () => void }> = (
             <h4 style={{ textAlign: 'center', margin: '0 0 1rem 0', fontWeight: 900 }}>LIBERACIÓN DE RESPONSABILIDAD</h4>
             {`CLUB DEPORTIVO SOCIAL Y CULTURAL RANAS JIU JITSU
 
-            A través de este documento acepto y libero de toda responsabilidad al Club Deportivo Social y Cultural Ranas Jiu Jitsu, a sus representantes, asociados, recinto que albergue actividades y/o sponsors del club y/o cualquier evento, de responsabilidad ante accidentes que generen lesiones y/o enfermedades, como resultado de mi participación como deportista o espectador en los entrenamientos, competencias y actividades propias de la organización.
-            Por lo cual libero totalmente al Club Deportivo Social y Cultural Ranas Jiu Jitsu, de ser declarado responsable por lesiones que sucedan durante la práctica de la actividad deportiva o como espectador.
+            A través de este documento acepto y libero de toda responsabilidad a la Academia Demo, a sus representantes, asociados, recinto que albergue actividades y/o sponsors del club y/o cualquier evento, de responsabilidad ante accidentes que generen lesiones y/o enfermedades, como resultado de mi participación como deportista o espectador en los entrenamientos, competencias y actividades propias de la organización.
+            Por lo cual libero totalmente a la Academia Demo, de ser declarado responsable por lesiones que sucedan durante la práctica de la actividad deportiva o como espectador.
 
             Declaro que:
-            1. He leído y acepto las condiciones de participación del Club Deportivo Social y Cultural Ranas Jiu Jitsu también su reglamento y circular de financiamiento.
+            1. He leído y acepto las condiciones de participación del Academia Demo también su reglamento y circular de financiamiento.
             2. Entiendo que la participación incluye riesgo de lesiones físicas.
-            3. Estoy en conocimiento de alguna condición médica previamente informada en la anamnesis que limite la participación de las actividades del Club Deportivo Social y Cultural Ranas Jiu Jitsu.
+            3. Estoy en conocimiento de alguna condición médica previamente informada en la anamnesis que limite la participación de las actividades del Academia Demo.
             4. Poseo cobertura médica para estas actividades.
-            5. Entiendo como apoderado, tutor o participante que en el caso de que exista algún accidente o lesión el Club Deportivo Social y Cultural Ranas Jiu Jitsu y sus representantes proveerán los primeros auxilios básicos, derivando al centro asistencial señalado previamente en la anamnesis, informando al tutor o familiar.
-            6. Acepto que el Club Deportivo Social y Cultural Ranas Jiu Jitsu haga uso de fotografías, video o cualquier otra forma de broadcast, para efectos de promoción nacional e internacional.
-            7. A través de mi firma en este documento acepto toda responsabilidad de mis acciones en relación con mi participación del Club Deportivo Social y Cultural Ranas Jiu Jitsu.
+            5. Entiendo como apoderado, tutor o participante que en el caso de que exista algún accidente o lesión el Academia Demo y sus representantes proveerán los primeros auxilios básicos, derivando al centro asistencial señalado previamente en la anamnesis, informando al tutor o familiar.
+            6. Acepto que el Academia Demo haga uso de fotografías, video o cualquier otra forma de broadcast, para efectos de promoción nacional e internacional.
+            7. A través de mi firma en este documento acepto toda responsabilidad de mis acciones en relación con mi participación del Academia Demo.
             8. Acepto la responsabilidad por mis posesiones y equipo deportivo durante los entrenamientos.
-            9. A través de este documento libero de toda responsabilidad Club Deportivo Social y Cultural Ranas Jiu Jitsu y a sus representantes, voluntarios, sponsors, directores, miembros, empleados, agentes y administradores de toda compensación o prosecución relacionada a las actividades del club de las cuales pueda resultar lesionado y/o accidentado.
+            9. A través de este documento libero de toda responsabilidad a la Academia Demo y a sus representantes, voluntarios, sponsors, directores, miembros, empleados, agentes y administradores de toda compensación o prosecución relacionada a las actividades del club de las cuales pueda resultar lesionado y/o accidentado.
             10. Libero de toda responsabilidad, posible persecución y responsabilidad económica o demandas de compensación a los organizadores por pérdida de posesiones personales o equipamiento deportivo.
             11. Acepto subir y permitir el uso de una fotografía de mi rostro (foto de perfil) con el fin exclusivo de permitir mi correcta identificación por parte del personal administrativo y los profesores del club en los registros internos.`}
           </div>

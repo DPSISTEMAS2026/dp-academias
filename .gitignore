@@ -15,6 +15,27 @@ dist-ssr/
 # Environment variables
 .env
 .env.production
+**/.env
+server/.env
+client/.env
+
+# Temp / previews
+.tmp-mockups/
+.tmp-*/
+.tmp-*
+Diseño sin título (3).png
+Diseño sin título.svg
+ChatGPT Image *
+/FOTOS/
+/FOTOS PARA LANDING/
+/MOCKUPS/
+/CELULAR/
+
+# Cursor
+.cursor/
+
+# Local demo uploads
+server/data/uploads/
 
 # Editor directories and files
 .vscode/*

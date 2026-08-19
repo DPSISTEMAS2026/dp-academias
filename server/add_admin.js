@@ -7,8 +7,8 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function run() {
-    const email = 'd.diazaraya19@gmail.com';
-    const password = 'admin123';
+    const email = process.env.CONTACT_EMAIL || 'contacto@dpsistemas.cl';
+    const password = process.env.ADMIN_PASSWORD || 'admin123';
 
     console.log(`Checking if admin ${email} already exists...`);
     const { data: existing, error: findError } = await supabase

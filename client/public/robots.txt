@@ -1,6 +1,5 @@
-# Ranas Jiu Jitsu - robots.txt
+# DP Sistemas — robots.txt
 User-agent: *
 Allow: /
 
-# Sitemap
-Sitemap: https://ranasjiujitsu.cl/sitemap.xml
+Sitemap: https://dpsistemas.cl/sitemap.xml

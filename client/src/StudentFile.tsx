@@ -98,7 +98,11 @@ export default function StudentFile({
     setSaveHint('');
     try {
       const result = await onSave(draft);
-      setSaveHint(result === false ? 'No se pudo guardar' : 'Ficha guardada');
+      const ok = result !== false;
+      // #region agent log
+      fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'D',location:'StudentFile.tsx:save-result',message:'guardar resultado',data:{id:draft.id,ok,resultType:typeof result,hint:ok?'Ficha guardada':'No se pudo guardar'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      setSaveHint(ok ? 'Ficha guardada' : 'No se pudo guardar');
     } catch {
       setSaveHint('No se pudo guardar');
     } finally {

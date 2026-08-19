@@ -914,6 +914,9 @@ const App: React.FC = () => {
         setStudents(prev => prev.map(s => String(s.id) === String(updatedStudent.id) ? mergedStudent : s));
         if (selectedStudent && String(selectedStudent.id) === String(updatedStudent.id)) {
           setSelectedStudent(mergedStudent);
+          // #region agent log
+          fetch('http://127.0.0.1:7384/ingest/9e21c8e3-483a-45df-aa40-cfd1021a0115',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'371f79'},body:JSON.stringify({sessionId:'371f79',hypothesisId:'E',location:'App.tsx:setSelectedStudent',message:'selectedStudent after save',data:{id:mergedStudent.id,allergies:mergedStudent.allergies||'',tutorName:mergedStudent.tutorName||'',hasNestedFicha:!!mergedStudent.ficha},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         }
         setIsEditingStudent(false);
         if (currentUser && String(currentUser.id) === String(updatedStudent.id)) {

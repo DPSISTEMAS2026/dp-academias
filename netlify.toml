@@ -1,19 +1,24 @@
 [build]
   base = "client"
-  command = "npm install && npm run build && mkdir -p dist-netlify/academias && cp -a dist/. dist-netlify/academias/"
-  publish = "dist-netlify"
+  command = "npm install && npm run build"
+  publish = "dist"
 
 [build.environment]
-  VITE_BASE = "/academias/"
+  VITE_BASE = "/"
 
-# Vite pide /academias/...; el build queda en esa carpeta para que logos y mockups existan.
+# Enlaces viejos del path /academias → raíz del subdominio
 [[redirects]]
-  from = "/"
-  to = "/academias/"
-  status = 302
+  from = "/academias"
+  to = "/"
+  status = 301
 
-# Sin force: si el archivo existe (png, svg, js) Netlify lo sirve; si no, es la SPA.
 [[redirects]]
   from = "/academias/*"
-  to = "/academias/index.html"
+  to = "/:splat"
+  status = 301
+
+# Sin force: PNG/SVG/JS se sirven; el resto es la SPA
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200

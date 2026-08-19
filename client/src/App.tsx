@@ -1578,9 +1578,9 @@ const App: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-        style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: window.innerWidth < 1024 ? 'column' : 'row', position: 'relative', overflowX: 'hidden', background: '#000' }}>
+        style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: window.innerWidth < 1024 ? 'column' : 'row', position: 'relative', overflowX: 'hidden', background: '#fff' }}>
         {/* Decorative Background for Mobile */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: 0.4 }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: 0.18 }}>
           <div style={{ position: 'absolute', top: '20%', left: '10%', width: '300px', height: '300px', background: 'var(--logo-green)', filter: 'blur(100px)', borderRadius: '50%' }} />
           <div style={{ position: 'absolute', bottom: '20%', right: '10%', width: '300px', height: '300px', background: 'var(--logo-green)', filter: 'blur(100px)', borderRadius: '50%', opacity: 0.5 }} />
         </div>
@@ -1598,8 +1598,8 @@ const App: React.FC = () => {
             alignItems: window.innerWidth < 1024 ? 'center' : 'flex-start',
             position: 'relative',
             zIndex: 1,
-            color: '#fff',
-            background: 'linear-gradient(135deg, #000, #0a0a0a)'
+            color: '#111',
+            background: '#fff'
           }}
         >
           <div style={{ position: 'relative', display: 'inline-flex', marginBottom: window.innerWidth < 1024 ? '0' : '2.5rem' }}>
@@ -1607,11 +1607,11 @@ const App: React.FC = () => {
           </div>
           <div className="desktop-only" style={{ width: '100%', textAlign: 'inherit', display: 'flex', flexDirection: 'column' }}>
             <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block', marginTop: '2.5rem' }}>DP Sistemas y Automatizaciones</span>
-            <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', color: '#fff', marginBottom: '2rem', lineHeight: 1, letterSpacing: '-2px' }}>
+            <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', color: '#111', marginBottom: '2rem', lineHeight: 1, letterSpacing: '-2px' }}>
               Entra a la<br />
               <span style={{ color: 'var(--logo-green)' }}>demo.</span>
             </h1>
-            <p style={{ fontSize: '1.1rem', color: 'rgba(255,255,255,0.6)', maxWidth: '400px', lineHeight: 1.6, fontWeight: 500 }}>
+            <p style={{ fontSize: '1.1rem', color: 'rgba(17,17,17,0.55)', maxWidth: '400px', lineHeight: 1.6, fontWeight: 500 }}>
               Acceso habilitado por 24 horas a un correo específico, después de la reunión.
             </p>
           </div>
@@ -1628,10 +1628,10 @@ const App: React.FC = () => {
               maxWidth: '450px', 
               padding: window.innerWidth < 768 ? '2.5rem' : '4rem', 
               borderRadius: '3rem', 
-              background: 'rgba(255,255,255,0.03)', 
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: '#fff', 
+              border: '1px solid rgba(17,17,17,0.08)',
               backdropFilter: 'blur(40px)',
-              boxShadow: '0 50px 100px rgba(0,0,0,0.5)'
+              boxShadow: '0 24px 60px rgba(17,17,17,0.08)'
             }}
           >
             <div style={{ marginBottom: window.innerWidth < 1024 ? '1.5rem' : '3rem' }}>
@@ -1642,13 +1642,13 @@ const App: React.FC = () => {
               >
                 <ChevronLeft size={16} /> Volver al inicio
               </button>
-              <h2 style={{ fontSize: window.innerWidth < 1024 ? '1.8rem' : '2.5rem', color: '#fff', letterSpacing: '-1px', marginBottom: '0.2rem' }}>Acceso</h2>
-              <p className="desktop-only" style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.95rem', fontWeight: 500 }}>Ingresa tus credenciales para continuar</p>
+              <h2 style={{ fontSize: window.innerWidth < 1024 ? '1.8rem' : '2.5rem', color: '#111', letterSpacing: '-1px', marginBottom: '0.2rem' }}>Acceso</h2>
+              <p className="desktop-only" style={{ color: 'rgba(17,17,17,0.5)', fontSize: '0.95rem', fontWeight: 500 }}>Ingresa tus credenciales para continuar</p>
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Correo Electrónico</label>
+                <label style={{ color: 'var(--logo-green)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Correo Electrónico</label>
                 <div style={{ position: 'relative' }}>
                   <Mail size={18} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--logo-green)' }} />
                   <input 
@@ -1660,23 +1660,23 @@ const App: React.FC = () => {
                     style={{ 
                       width: '100%', 
                       padding: '1.2rem 1.2rem 1.2rem 3.5rem', 
-                      background: 'rgba(255,255,255,0.05)', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
+                      background: '#f8fafc', 
+                      border: '1px solid #e2e8f0', 
                       borderRadius: '1.2rem', 
-                      color: '#fff', 
+                      color: '#111', 
                       fontSize: '1rem', 
                       outline: 'none',
                       transition: 'border-color 0.3s'
                     }} 
                     onFocus={(e) => e.target.style.borderColor = 'var(--logo-green)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Contraseña</label>
+                  <label style={{ color: 'var(--logo-green)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Contraseña</label>
                   <button type="button" onClick={() => { setRecoveryEmail(authEmail); setRecoveryStatus('idle'); setRecoveryMessage(''); setShowRecoveryModal(true); }} style={{ background: 'none', border: 'none', color: 'var(--logo-green)', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', padding: 0 }}>¿Olvidaste tu contraseña?</button>
                 </div>
                 <div style={{ position: 'relative' }}>
@@ -1690,23 +1690,23 @@ const App: React.FC = () => {
                     style={{ 
                       width: '100%', 
                       padding: '1.2rem 1.2rem 1.2rem 3.5rem', 
-                      background: 'rgba(255,255,255,0.05)', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
+                      background: '#f8fafc', 
+                      border: '1px solid #e2e8f0', 
                       borderRadius: '1.2rem', 
-                      color: '#fff', 
+                      color: '#111', 
                       fontSize: '1rem', 
                       outline: 'none',
                       letterSpacing: '0.1em'
                     }} 
                     onFocus={(e) => e.target.style.borderColor = 'var(--logo-green)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                   />
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginTop: '0.5rem' }}>
                 <input type="checkbox" id="remember" style={{ accentColor: 'var(--logo-green)' }} />
-                <label htmlFor="remember" style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer' }}>Recordarme en este equipo</label>
+                <label htmlFor="remember" style={{ color: 'rgba(17,17,17,0.65)', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer' }}>Recordarme en este equipo</label>
               </div>
 
               <button 
@@ -1735,8 +1735,8 @@ const App: React.FC = () => {
               </button>
             </form>
 
-            <div style={{ marginTop: '2.5rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2rem' }}>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+            <div style={{ marginTop: '2.5rem', textAlign: 'center', borderTop: '1px solid rgba(17,17,17,0.08)', paddingTop: '2rem' }}>
+              <p style={{ color: 'rgba(17,17,17,0.45)', fontSize: '0.85rem' }}>
                 ¿Aún no eres parte de la manada? <br />
                 <a href="#contact" onClick={() => setViewMode('landing')} style={{ color: 'var(--logo-green)', fontWeight: 800, textDecoration: 'none' }}>Únete hoy mismo</a>
               </p>
@@ -1749,24 +1749,24 @@ const App: React.FC = () => {
                   style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(15px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}
                 >
                   <motion.div initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }}
-                    style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '2.5rem', padding: '3rem 2.5rem', width: '100%', maxWidth: '420px', color: '#fff', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}
+                    style={{ background: '#fff', border: '1px solid rgba(17,17,17,0.08)', borderRadius: '2.5rem', padding: '3rem 2.5rem', width: '100%', maxWidth: '420px', color: '#111', boxShadow: '0 25px 50px -12px rgba(17,17,17,0.18)' }}
                   >
-                    <h3 style={{ fontSize: '1.8rem', fontWeight: 900, marginBottom: '0.8rem', textAlign: 'center', color: '#fff' }}>¿Quién va a entrenar?</h3>
-                    <p style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', fontSize: '0.9rem', marginBottom: '2.5rem' }}>Hemos detectado varias cuentas con este correo.</p>
+                    <h3 style={{ fontSize: '1.8rem', fontWeight: 900, marginBottom: '0.8rem', textAlign: 'center', color: '#111' }}>¿Quién va a entrenar?</h3>
+                    <p style={{ color: 'rgba(17,17,17,0.5)', textAlign: 'center', fontSize: '0.9rem', marginBottom: '2.5rem' }}>Hemos detectado varias cuentas con este correo.</p>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                       {multiStudentAuthOptions.map(opt => (
                         <button key={opt.id} onClick={() => handleLogin(opt)}
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--logo-green)', borderRadius: '1.2rem', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.2rem', cursor: 'pointer', textAlign: 'left', color: '#fff', transition: 'all 0.3s' }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(5, 168, 106, 0.1)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                          style={{ background: '#f8fafc', border: '1px solid var(--logo-green)', borderRadius: '1.2rem', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.2rem', cursor: 'pointer', textAlign: 'left', color: '#111', transition: 'all 0.3s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 105, 112, 0.08)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
                         >
-                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--logo-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: '2px solid #fff', boxShadow: '0 0 20px rgba(22,196,122,0.3)' }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--logo-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.2rem', border: '2px solid #fff', boxShadow: '0 0 20px rgba(22,196,122,0.3)', color: '#fff' }}>
                             {opt.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff', marginBottom: '2px' }}>{opt.name}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{beltLabels[opt.belt || 'WHITE']} · {opt.plan?.toString().includes('ilimi') ? 'Plan Ilimitado' : `${opt.plan?.[0] || 2} Clases`}</div>
+                            <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#111', marginBottom: '2px' }}>{opt.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'rgba(17,17,17,0.5)', fontWeight: 600 }}>{beltLabels[opt.belt || 'WHITE']} · {opt.plan?.toString().includes('ilimi') ? 'Plan Ilimitado' : `${opt.plan?.[0] || 2} Clases`}</div>
                           </div>
                         </button>
                       ))}
@@ -1788,16 +1788,16 @@ const App: React.FC = () => {
                   onClick={(e) => e.target === e.currentTarget && setShowRecoveryModal(false)}
                 >
                   <motion.div initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 50 }}
-                    style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '2.5rem', padding: '3rem 2.5rem', width: '100%', maxWidth: '420px', color: '#fff', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}
+                    style={{ background: '#fff', border: '1px solid rgba(17,17,17,0.08)', borderRadius: '2.5rem', padding: '3rem 2.5rem', width: '100%', maxWidth: '420px', color: '#111', boxShadow: '0 25px 50px -12px rgba(17,17,17,0.18)' }}
                   >
                     {recoveryStatus === 'success' ? (
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ width: '70px', height: '70px', background: 'rgba(5,168,106,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', border: '2px solid var(--logo-green)' }}>
                           <Mail size={30} style={{ color: 'var(--logo-green)' }} />
                         </div>
-                        <h3 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '1rem', color: '#fff' }}>¡Correo enviado!</h3>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '2rem' }}>{recoveryMessage}</p>
-                        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginBottom: '2rem' }}>Revisa tu bandeja de entrada y también la carpeta de spam.</p>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '1rem', color: '#111' }}>¡Correo enviado!</h3>
+                        <p style={{ color: 'rgba(17,17,17,0.6)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '2rem' }}>{recoveryMessage}</p>
+                        <p style={{ color: 'rgba(17,17,17,0.4)', fontSize: '0.75rem', marginBottom: '2rem' }}>Revisa tu bandeja de entrada y también la carpeta de spam.</p>
                         <button onClick={() => setShowRecoveryModal(false)}
                           style={{ width: '100%', padding: '1.2rem', background: 'var(--logo-green)', border: 'none', borderRadius: '1.2rem', color: '#fff', fontWeight: 900, fontSize: '1rem', cursor: 'pointer' }}
                         >Volver al Login</button>
@@ -1808,8 +1808,8 @@ const App: React.FC = () => {
                           <div style={{ width: '60px', height: '60px', background: 'rgba(5,168,106,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
                             <Lock size={24} style={{ color: 'var(--logo-green)' }} />
                           </div>
-                          <h3 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '0.5rem', color: '#fff' }}>Recuperar Contraseña</h3>
-                          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', lineHeight: 1.5 }}>Ingresa tu correo electrónico y te enviaremos tus datos de acceso.</p>
+                          <h3 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '0.5rem', color: '#111' }}>Recuperar Contraseña</h3>
+                          <p style={{ color: 'rgba(17,17,17,0.5)', fontSize: '0.85rem', lineHeight: 1.5 }}>Ingresa tu correo electrónico y te enviaremos tus datos de acceso.</p>
                         </div>
 
                         {recoveryStatus === 'error' && (
@@ -1819,7 +1819,7 @@ const App: React.FC = () => {
                         )}
 
                         <div style={{ marginBottom: '1.5rem' }}>
-                          <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.6rem' }}>Correo Electrónico</label>
+                          <label style={{ color: 'var(--logo-green)', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.6rem' }}>Correo Electrónico</label>
                           <div style={{ position: 'relative' }}>
                             <Mail size={18} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--logo-green)' }} />
                             <input
@@ -1829,9 +1829,9 @@ const App: React.FC = () => {
                               onChange={e => setRecoveryEmail(e.target.value)}
                               onKeyDown={e => e.key === 'Enter' && handleRecoverPassword()}
                               autoFocus
-                              style={{ width: '100%', padding: '1.2rem 1.2rem 1.2rem 3.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '1.2rem', color: '#fff', fontSize: '1rem', outline: 'none' }}
+                              style={{ width: '100%', padding: '1.2rem 1.2rem 1.2rem 3.5rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '1.2rem', color: '#111', fontSize: '1rem', outline: 'none' }}
                               onFocus={(e) => e.target.style.borderColor = 'var(--logo-green)'}
-                              onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.15)'}
+                              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                             />
                           </div>
                         </div>
@@ -1849,7 +1849,7 @@ const App: React.FC = () => {
                         </button>
 
                         <button onClick={() => setShowRecoveryModal(false)}
-                          style={{ width: '100%', padding: '1rem', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', fontWeight: 800, marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem' }}
+                          style={{ width: '100%', padding: '1rem', background: 'transparent', border: 'none', color: 'rgba(17,17,17,0.5)', fontWeight: 800, marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem' }}
                         >Cancelar</button>
                       </>
                     )}

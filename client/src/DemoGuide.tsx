@@ -44,7 +44,7 @@ export default function DemoGuide({ mode, onGo, moduleId }: Props) {
     prevModule.current = moduleId;
     if (!prev || !moduleId || prev === moduleId) return;
     setHidden(false);
-    setOpen(true);
+    setOpen(false);
   }, [moduleId, mode]);
 
   const push = (msg: Omit<Msg, 'id'>) => {

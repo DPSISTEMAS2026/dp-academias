@@ -2,6 +2,9 @@ import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { startTelemetry } from './telemetry.ts'
+
+startTelemetry()
 
 class RootCrashBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }

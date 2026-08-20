@@ -3128,6 +3128,52 @@ app.put('/api/events/:id/registrations/:rid', async (req, res) => {
     }
 });
 
+app.post('/api/telemetry', async (req, res) => {
+    try {
+        const raw = Array.isArray(req.body?.events) ? req.body.events : [req.body];
+        const rows = raw.slice(0, 20).map((ev, i) => ({
+            id: `c_${Date.now().toString(36)}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+            session_id: String(ev?.sessionId || 'anon').slice(0, 80),
+            path: String(ev?.path || '').slice(0, 180),
+            module: String(ev?.module || '').slice(0, 40),
+            role: String(ev?.role || '').slice(0, 40),
+            email: String(ev?.email || '').slice(0, 120),
+            label: String(ev?.label || '').slice(0, 80),
+            tag: String(ev?.tag || '').slice(0, 20),
+        })).filter((row) => row.label);
+        if (!rows.length) return res.json({ ok: true, saved: 0 });
+        const { error } = await supabase.from('demo_clicks').insert(rows);
+        if (error) throw error;
+        const { count } = await supabase.from('demo_clicks').select('id', { count: 'exact', head: true });
+        if ((count || 0) > 400) {
+            const extra = (count || 0) - 400;
+            const { data: oldRows } = await supabase.from('demo_clicks').select('id').order('created_at', { ascending: true }).limit(extra);
+            const ids = (oldRows || []).map((r) => r.id);
+            if (ids.length) await supabase.from('demo_clicks').delete().in('id', ids);
+        }
+        res.json({ ok: true, saved: rows.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/telemetry', async (req, res) => {
+    const expected = process.env.TELEMETRY_KEY || 'dp-interno-26';
+    const got = String(req.headers['x-telemetry-key'] || req.query.key || '');
+    if (!got || got !== expected) return res.status(401).json({ error: 'No autorizado' });
+    try {
+        const { data, error } = await supabase
+            .from('demo_clicks')
+            .select('id, created_at, session_id, path, module, role, email, label, tag')
+            .order('created_at', { ascending: false })
+            .limit(200);
+        if (error) throw error;
+        res.json(data || []);
+    } catch (error) {
+        res.status(500).json({ error: error.message, tableMissing: /demo_clicks|relation/i.test(error.message || '') });
+    }
+});
+
 app.listen(PORT, () => {
     const projectRef = supabaseUrl.replace('https://', '').split('.')[0] || '(sin proyecto)';
     console.log(`Server running on port ${PORT}`);

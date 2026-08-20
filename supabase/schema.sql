@@ -238,3 +238,22 @@ create policy event_registrations_all on public.event_registrations for all usin
 grant all on public.events to anon, authenticated;
 grant all on public.event_registrations to anon, authenticated;
 
+create table if not exists public.demo_clicks (
+  id text primary key,
+  created_at timestamptz default now(),
+  session_id text not null,
+  path text default '',
+  module text default '',
+  role text default '',
+  email text default '',
+  label text default '',
+  tag text default ''
+);
+
+create index if not exists demo_clicks_created_at on public.demo_clicks (created_at desc);
+
+alter table public.demo_clicks enable row level security;
+drop policy if exists demo_clicks_all on public.demo_clicks;
+create policy demo_clicks_all on public.demo_clicks for all using (true) with check (true);
+grant all on public.demo_clicks to anon, authenticated;
+

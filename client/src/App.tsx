@@ -173,6 +173,11 @@ import type {
 } from './types';
 import { BRAND, avatarSrc, appPath } from './brand';
 
+function isInternalRoute() {
+  const p = window.location.pathname.replace(/\/+$/, '') || '/';
+  return p === appPath('/interno');
+}
+
 function isAuthRoute() {
   const p = window.location.pathname.replace(/\/+$/, '') || '/';
   return p === appPath('/acceso') || p === appPath('/login');
@@ -201,7 +206,7 @@ function consumeEventLoginNext() {
 }
 
 function goAuthUrl() {
-  if (isEventRoute()) return;
+  if (isEventRoute() || isInternalRoute()) return;
   const next = appPath('/acceso');
   if ((window.location.pathname.replace(/\/+$/, '') || '/') !== next) {
     window.history.pushState({}, '', next);
@@ -209,7 +214,7 @@ function goAuthUrl() {
 }
 
 function goHomeUrl() {
-  if (isEventRoute()) return;
+  if (isEventRoute() || isInternalRoute()) return;
   const next = appPath('/') || '/';
   if (window.location.pathname !== next) {
     window.history.pushState({}, '', next);
@@ -225,6 +230,7 @@ import PaymentsPanel from './PaymentsPanel';
 import GradesPanel from './GradesPanel';
 import EventsPanel from './EventsPanel';
 import EventPublic, { OpenEventsCard } from './EventPublic';
+import InternalClicks from './InternalClicks';
 import LibraryPanel from './LibraryPanel';
 import StudentLibrary from './StudentLibrary';
 import DashboardPanel from './DashboardPanel';
@@ -316,7 +322,7 @@ const VIDEO_CATEGORIES = [
 
 const App: React.FC = () => {
   const [isSplashVisible, setIsSplashVisible] = useState(() => {
-    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute())) return false;
+    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute() || isInternalRoute())) return false;
     const shown = sessionStorage.getItem('splashShown');
     if (!shown) { sessionStorage.setItem('splashShown', '1'); return true; }
     return false;
@@ -452,7 +458,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isEventRoute()) return;
+    if (isEventRoute() || isInternalRoute()) return;
     if (viewMode === 'auth') goAuthUrl();
     if (viewMode === 'landing') goHomeUrl();
     if (viewMode === 'app' && isAuthRoute()) goHomeUrl();
@@ -460,7 +466,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const onPop = () => {
-      if (isEventRoute()) return;
+      if (isEventRoute() || isInternalRoute()) return;
       if (isAuthRoute()) setViewMode('auth');
       else if (viewMode !== 'app') setViewMode('landing');
     };
@@ -1577,6 +1583,9 @@ const App: React.FC = () => {
     : null;
   if (eventSlug) {
     return <EventPublic slug={decodeURIComponent(eventSlug)} apiUrl={API_URL} />;
+  }
+  if (isInternalRoute()) {
+    return <InternalClicks apiUrl={API_URL} />;
   }
 
   if (isSplashVisible) {

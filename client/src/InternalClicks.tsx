@@ -24,22 +24,25 @@ export default function InternalClicks({ apiUrl }: Props) {
   const [unlocked, setUnlocked] = useState(!!sessionStorage.getItem(KEY_STORAGE));
 
   const load = (secret: string) => {
-    fetch(`${apiUrl}/api/telemetry`, { headers: { 'X-Telemetry-Key': secret } })
+    const url = `${apiUrl}/api/telemetry?key=${encodeURIComponent(secret)}`;
+    fetch(url)
       .then(async (res) => {
-        if (!res.ok) throw new Error('Clave incorrecta');
+        if (res.status === 404) throw new Error('La API de producción aún no actualizó. Espera el deploy de Render y recarga.');
+        if (res.status === 401) throw new Error('Clave incorrecta');
+        if (!res.ok) throw new Error(`No se pudo leer la actividad (${res.status})`);
         return res.json();
       })
       .then((data) => {
-        if (!Array.isArray(data)) throw new Error('Clave incorrecta');
+        if (!Array.isArray(data)) throw new Error('Respuesta inválida de la API');
         setRows(data);
         setError('');
         setUnlocked(true);
         sessionStorage.setItem(KEY_STORAGE, secret);
       })
-      .catch(() => {
+      .catch((err) => {
         setUnlocked(false);
         sessionStorage.removeItem(KEY_STORAGE);
-        setError('No se pudo entrar. Revisa la clave.');
+        setError(err instanceof Error ? err.message : 'No se pudo entrar.');
       });
   };
 

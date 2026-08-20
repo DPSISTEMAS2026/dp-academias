@@ -139,7 +139,7 @@
 .ep-cats th { text-align: left; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; padding: 0.4rem 0; }
 .ep-cats td { padding: 0.65rem 0; border-top: 1px solid rgba(22,22,22,0.06); font-weight: 700; }
 
-.ep-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+.ep-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
 .ep-tabs button {
   border: 1px solid rgba(22,22,22,0.12);
   background: #fff;

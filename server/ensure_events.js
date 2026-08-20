@@ -65,10 +65,17 @@ await client.query(`
     created_at timestamptz default now()
   )
 `);
+await client.query(`alter table public.events add column if not exists ticket_price integer default 0`);
+await client.query(`alter table public.events add column if not exists ticket_capacity integer`);
 await client.query(`
   create unique index if not exists event_reg_student_unique
     on public.event_registrations (event_id, student_id)
     where student_id is not null
+`);
+await client.query(`
+  create unique index if not exists event_reg_spectator_doc
+    on public.event_registrations (event_id, lower(regexp_replace(coalesce(document_id, ''), '[^0-9kK]', '', 'g')))
+    where kind = 'spectator' and coalesce(document_id, '') <> ''
 `);
 await client.query(`alter table public.events enable row level security`);
 await client.query(`alter table public.event_registrations enable row level security`);
@@ -89,13 +96,13 @@ const categories = JSON.stringify([
 await client.query(
   `insert into public.events (
     id, slug, title, description, photo, rules_url, rules_name,
-    event_date, start_time, end_time, address, capacity, paid, price, status, categories
+    event_date, start_time, end_time, address, capacity, paid, price, ticket_price, status, categories
   ) values (
     'ev1', 'torneo-interacademias', 'Torneo Interacademias',
     $1, $2, $3, 'Bases Torneo Interacademias.pdf',
-    '2026-10-24', '09:00', '18:00', 'Sede de ejemplo', 120, true, 15000, 'published', $4::jsonb
+    '2026-10-24', '09:00', '18:00', 'Sede de ejemplo', 120, true, 15000, 5000, 'published', $4::jsonb
   )
-  on conflict (id) do update set title = excluded.title, description = excluded.description, status = excluded.status, categories = excluded.categories, photo = excluded.photo, address = excluded.address, event_date = excluded.event_date`,
+  on conflict (id) do update set title = excluded.title, description = excluded.description, status = excluded.status, categories = excluded.categories, photo = excluded.photo, address = excluded.address, event_date = excluded.event_date, ticket_price = excluded.ticket_price`,
   [
     'Este es un evento de ejemplo. Alumnos e invitados se inscriben aquí. El pago entra por Mercado Pago: la pasarela confirma el cobro y deja inscrito a quien pagó.',
     'https://images.unsplash.com/photo-1555597673-b21d5c935865?w=1600',
@@ -111,7 +118,8 @@ await client.query(`
   ) values
     ('er1', 'ev1', 'student', '1', 'Matías Soto', 'matias.soto@demo.cl', '+56911111111', '20.111.111-1', '2008-03-12', 18, 68, 'MALE', 'WHITE', 'Academia Demo', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia'),
     ('er2', 'ev1', 'student', '2', 'Camila Rojas', 'camila.rojas@demo.cl', '+56922222222', '15.222.222-2', '1999-11-04', 26, 62, 'FEMALE', 'BLUE', 'Academia Demo', 'c-blue', 'Adulto azul', 15000, 'pending', 'Transferencia'),
-    ('er3', 'ev1', 'guest', null, 'Lucas Herrera', 'lucas.herrera@otra.cl', '+56944444444', '12.333.333-3', '1998-06-20', 28, 76, 'MALE', 'WHITE', 'Academia Cordillera', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia')
+    ('er3', 'ev1', 'guest', null, 'Lucas Herrera', 'lucas.herrera@otra.cl', '+56944444444', '12.333.333-3', '1998-06-20', 28, 76, 'MALE', 'WHITE', 'Academia Cordillera', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia'),
+    ('er4', 'ev1', 'spectator', null, 'Ana Fuentes', 'ana.fuentes@demo.cl', '', '16.444.444-4', '', null, null, '', '', '', 'entrada', 'Entrada asistente', 5000, 'paid', 'Mercado Pago')
   on conflict (id) do update set status = excluded.status
 `);
 

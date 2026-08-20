@@ -123,13 +123,13 @@ insert into public.videos (id, title, description, url, thumbnail, beltlevel, ca
     'v1',
     'Armbar desde guardia',
     'Técnica base de Jiu Jitsu para cinturón blanco y azul.',
-    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    '',
     'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=800',
     'WHITE',
     'Técnicas',
     1
   )
-on conflict (id) do update set thumbnail = excluded.thumbnail;
+on conflict (id) do update set url = excluded.url, thumbnail = excluded.thumbnail;
 
 insert into public.events (
   id, slug, title, description, photo, rules_url, rules_name,

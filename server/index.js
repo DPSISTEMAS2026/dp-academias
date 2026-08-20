@@ -2841,6 +2841,8 @@ function mapEvent(row, registered = 0) {
         capacity: row.capacity,
         paid: row.paid !== false,
         price: Number(row.price) || 0,
+        ticketPrice: Number(row.ticket_price) || 0,
+        ticketCapacity: row.ticket_capacity == null ? null : Number(row.ticket_capacity),
         status: row.status || 'draft',
         categories: Array.isArray(row.categories) ? row.categories : [],
         createdAt: row.created_at,
@@ -2854,7 +2856,7 @@ function mapRegistration(row) {
     return {
         id: row.id,
         eventId: row.event_id,
-        kind: row.kind === 'student' ? 'student' : 'guest',
+        kind: row.kind === 'student' ? 'student' : (row.kind === 'spectator' ? 'spectator' : 'guest'),
         studentId: row.student_id || null,
         name: row.name,
         email: row.email || '',
@@ -2892,6 +2894,12 @@ function eventPayload(body, existing) {
         capacity: body.capacity === '' || body.capacity === undefined ? (existing?.capacity ?? null) : (body.capacity == null ? null : Number(body.capacity)),
         paid: body.paid === undefined ? (existing ? existing.paid !== false : true) : !!body.paid,
         price: body.price === undefined ? Number(existing?.price || 0) : Number(body.price) || 0,
+        ticket_price: body.ticketPrice === undefined && body.ticket_price === undefined
+            ? Number(existing?.ticket_price || 0)
+            : Number(body.ticketPrice ?? body.ticket_price || 0),
+        ticket_capacity: body.ticketCapacity === undefined && body.ticket_capacity === undefined
+            ? (existing?.ticket_capacity ?? null)
+            : (body.ticketCapacity === '' || body.ticket_capacity === '' || body.ticketCapacity == null && body.ticket_capacity == null ? null : Number(body.ticketCapacity ?? body.ticket_capacity)),
         status: body.status === 'published' || body.status === 'draft' ? body.status : (existing?.status || 'draft'),
         categories: Array.isArray(body.categories) ? body.categories : (existing?.categories || []),
     };
@@ -2902,12 +2910,14 @@ app.get('/api/events/public', async (_req, res) => {
         const { data, error } = await supabase.from('events').select('*').eq('status', 'published').order('event_date', { ascending: true });
         if (error) throw error;
         const ids = (data || []).map((e) => e.id);
-        let counts = {};
+        let athleteCounts = {};
         if (ids.length) {
-            const { data: regs } = await supabase.from('event_registrations').select('event_id').in('event_id', ids);
-            (regs || []).forEach((r) => { counts[r.event_id] = (counts[r.event_id] || 0) + 1; });
+            const { data: regs } = await supabase.from('event_registrations').select('event_id, kind').in('event_id', ids);
+            (regs || []).forEach((r) => {
+                if (r.kind !== 'spectator') athleteCounts[r.event_id] = (athleteCounts[r.event_id] || 0) + 1;
+            });
         }
-        res.json((data || []).map((row) => mapEvent(row, counts[row.id] || 0)));
+        res.json((data || []).map((row) => mapEvent(row, athleteCounts[row.id] || 0)));
     } catch (error) {
         res.status(500).json({ error: error.message, tableMissing: /events|relation/i.test(error.message || '') });
     }
@@ -2918,8 +2928,9 @@ app.get('/api/events/public/:slug', async (req, res) => {
         const { data, error } = await supabase.from('events').select('*').eq('slug', req.params.slug).maybeSingle();
         if (error) throw error;
         if (!data || data.status !== 'published') return res.status(404).json({ error: 'Evento no publicado' });
-        const { count } = await supabase.from('event_registrations').select('id', { count: 'exact', head: true }).eq('event_id', data.id);
-        res.json(mapEvent(data, count || 0));
+        const { data: regs } = await supabase.from('event_registrations').select('id, kind').eq('event_id', data.id);
+        const athletes = (regs || []).filter((r) => r.kind !== 'spectator').length;
+        res.json(mapEvent(data, athletes));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -2972,7 +2983,15 @@ app.put('/api/events/:id', async (req, res) => {
         if (curErr) throw curErr;
         if (!current) return res.status(404).json({ error: 'Evento no encontrado' });
         const row = eventPayload(req.body, current);
-        const { data, error } = await supabase.from('events').update(row).eq('id', req.params.id).select('*').single();
+        let { data, error } = await supabase.from('events').update(row).eq('id', req.params.id).select('*').single();
+        if (error && (error.code === 'PGRST204' || /ticket_price|ticket_capacity/.test(error.message || ''))) {
+            const fallback = { ...row };
+            delete fallback.ticket_price;
+            delete fallback.ticket_capacity;
+            const retry = await supabase.from('events').update(fallback).eq('id', req.params.id).select('*').single();
+            data = retry.data;
+            error = retry.error;
+        }
         if (error) throw error;
         res.json(mapEvent(data, 0));
     } catch (error) {
@@ -2991,6 +3010,10 @@ app.delete('/api/events/:id', async (req, res) => {
     }
 });
 
+function normalizeDocument(raw) {
+    return String(raw || '').replace(/[^0-9kK]/g, '').toUpperCase();
+}
+
 app.post('/api/events/:id/register', async (req, res) => {
     try {
         const { data: event, error: evErr } = await supabase.from('events').select('*').or(`id.eq.${req.params.id},slug.eq.${req.params.id}`).maybeSingle();
@@ -2998,16 +3021,56 @@ app.post('/api/events/:id/register', async (req, res) => {
         if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
         if (event.status !== 'published') return res.status(400).json({ error: 'El evento aún no está publicado.' });
 
-        const { count } = await supabase.from('event_registrations').select('id', { count: 'exact', head: true }).eq('event_id', event.id);
-        if (event.capacity && (count || 0) >= event.capacity) {
-            return res.status(400).json({ error: 'Cupos agotados.' });
+        const kind = req.body.kind === 'student' ? 'student' : (req.body.kind === 'spectator' ? 'spectator' : 'guest');
+        const { data: existingRegs } = await supabase.from('event_registrations').select('id, kind, document_id').eq('event_id', event.id);
+        const athleteCount = (existingRegs || []).filter((r) => r.kind !== 'spectator').length;
+        const ticketCount = (existingRegs || []).filter((r) => r.kind === 'spectator').length;
+
+        if (kind !== 'spectator' && event.capacity && athleteCount >= event.capacity) {
+            return res.status(400).json({ error: 'Cupos de competencia agotados.' });
+        }
+        if (kind === 'spectator' && event.ticket_capacity && ticketCount >= Number(event.ticket_capacity)) {
+            return res.status(400).json({ error: 'Entradas de asistente agotadas.' });
         }
 
-        const kind = req.body.kind === 'student' ? 'student' : 'guest';
         const studentId = kind === 'student' ? String(req.body.studentId || '') : '';
         const email = String(req.body.email || '').trim().toLowerCase();
         const name = String(req.body.name || '').trim();
+        const documentId = String(req.body.documentId || '').trim();
+        const docKey = normalizeDocument(documentId);
         if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+        if (kind === 'spectator') {
+            if (docKey.length < 7) return res.status(400).json({ error: 'RUT requerido para la entrada nominativa.' });
+            const dupDoc = (existingRegs || []).some((r) => r.kind === 'spectator' && normalizeDocument(r.document_id) === docKey);
+            if (dupDoc) return res.status(400).json({ error: 'Este RUT ya tiene una entrada para este evento.' });
+            const ticketPrice = Number(event.ticket_price || 0);
+            const paidEvent = event.paid !== false && ticketPrice > 0;
+            const row = {
+                id: `er${Date.now()}`,
+                event_id: event.id,
+                kind: 'spectator',
+                student_id: null,
+                name,
+                email,
+                phone: String(req.body.phone || '').trim(),
+                document_id: documentId,
+                birth_date: '',
+                age: null,
+                weight: null,
+                gender: '',
+                belt: '',
+                academy: '',
+                category_id: 'entrada',
+                category_name: 'Entrada asistente',
+                amount: ticketPrice,
+                status: paidEvent ? 'pending' : 'paid',
+                method: req.body.method || (paidEvent ? 'Mercado Pago' : 'Gratis'),
+            };
+            const { data, error } = await supabase.from('event_registrations').insert(row).select('*').single();
+            if (error) throw error;
+            return res.status(201).json(mapRegistration(data));
+        }
 
         if (studentId) {
             const { data: dup } = await supabase.from('event_registrations').select('id').eq('event_id', event.id).eq('student_id', studentId).maybeSingle();
@@ -3031,7 +3094,7 @@ app.post('/api/events/:id/register', async (req, res) => {
             name,
             email,
             phone: String(req.body.phone || '').trim(),
-            document_id: String(req.body.documentId || '').trim(),
+            document_id: documentId,
             birth_date: birthDate,
             age: ibjjf.age,
             weight: req.body.weight ? Number(req.body.weight) : null,

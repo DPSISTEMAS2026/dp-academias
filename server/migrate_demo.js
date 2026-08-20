@@ -181,7 +181,7 @@ async function seed(client) {
   await client.query(`
     insert into public.videos (id, title, description, url, thumbnail, beltlevel, category, sede_id, format, discipline, belts, authorized_only, duration) values
       ('v1', 'Armbar desde guardia', 'Técnica base de Jiu Jitsu para cinturón blanco y azul.',
-       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+       '',
        'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=800',
        'WHITE', 'Técnicas', 1, 'video', 'Jiu Jitsu', '["WHITE","BLUE"]'::jsonb, true, '06:24'),
       ('v2', 'Reglamento de competencia', 'Bases y puntaje para alumnos que van a torneo. Documento PDF.',
@@ -189,10 +189,10 @@ async function seed(client) {
        'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800',
        'WHITE', 'Reglamento', 1, 'document', 'Jiu Jitsu', '["WHITE","BLUE","PURPLE"]'::jsonb, true, 'PDF'),
       ('v3', 'Caídas y desplazamientos kids', 'Material de kids para cinturón gris.',
-       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+       '',
        'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800',
        'GRAY', 'Preparación', 1, 'video', 'Jiu Jitsu', '["GRAY"]'::jsonb, true, '04:10')
-    on conflict (id) do update set format = excluded.format, belts = excluded.belts, duration = excluded.duration, thumbnail = excluded.thumbnail
+    on conflict (id) do update set url = excluded.url, format = excluded.format, belts = excluded.belts, duration = excluded.duration, thumbnail = excluded.thumbnail
   `);
 
   await client.query(`delete from public.students where id not in ('1','2','3','4')`);
@@ -250,18 +250,20 @@ async function seed(client) {
     { id: 'c-blue', name: 'Adulto azul', minAge: 16, maxAge: 99, minWeight: null, maxWeight: null, gender: 'ANY', belts: ['BLUE'], price: 15000 },
     { id: 'c-fem', name: 'Femenino', minAge: 12, maxAge: 99, minWeight: null, maxWeight: null, gender: 'FEMALE', belts: [], price: 15000 },
   ];
+  await client.query(`alter table public.events add column if not exists ticket_price integer default 0`);
+  await client.query(`alter table public.events add column if not exists ticket_capacity integer`);
   await client.query(
     `insert into public.events (
       id, slug, title, description, photo, rules_url, rules_name,
-      event_date, start_time, end_time, address, capacity, paid, price, status, categories
+      event_date, start_time, end_time, address, capacity, paid, price, ticket_price, status, categories
     ) values (
       'ev1', 'torneo-interacademias', 'Torneo Interacademias',
       $1, $2, $3, 'Bases Torneo Interacademias.pdf',
-      '2026-10-24', '09:00', '18:00', 'Sede de ejemplo', 120, true, 15000, 'published', $4::jsonb
+      '2026-10-24', '09:00', '18:00', 'Sede de ejemplo', 120, true, 15000, 5000, 'published', $4::jsonb
     )
-    on conflict (id) do update set title = excluded.title, description = excluded.description, status = excluded.status, categories = excluded.categories, address = excluded.address`,
+    on conflict (id) do update set title = excluded.title, description = excluded.description, status = excluded.status, categories = excluded.categories, address = excluded.address, ticket_price = excluded.ticket_price`,
     [
-      'Este es un evento de ejemplo. Alumnos e invitados se inscriben aquí. El pago entra por Mercado Pago: la pasarela confirma el cobro y deja inscrito a quien pagó.',
+      'Este es un evento de ejemplo. Alumnos e invitados se inscriben aquí. El público compra una entrada nominativa. El pago entra por Mercado Pago.',
       'https://images.unsplash.com/photo-1555597673-b21d5c935865?w=1600',
       'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
       JSON.stringify(categories),
@@ -274,7 +276,8 @@ async function seed(client) {
     ) values
       ('er1', 'ev1', 'student', '1', 'Matías Soto', 'matias.soto@demo.cl', '+56911111111', '20.111.111-1', '2008-03-12', 18, 68, 'MALE', 'WHITE', 'Academia Demo', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia'),
       ('er2', 'ev1', 'student', '2', 'Camila Rojas', 'camila.rojas@demo.cl', '+56922222222', '15.222.222-2', '1999-11-04', 26, 62, 'FEMALE', 'BLUE', 'Academia Demo', 'c-blue', 'Adulto azul', 15000, 'pending', 'Transferencia'),
-      ('er3', 'ev1', 'guest', null, 'Lucas Herrera', 'lucas.herrera@otra.cl', '+56944444444', '12.333.333-3', '1998-06-20', 28, 76, 'MALE', 'WHITE', 'Academia Cordillera', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia')
+      ('er3', 'ev1', 'guest', null, 'Lucas Herrera', 'lucas.herrera@otra.cl', '+56944444444', '12.333.333-3', '1998-06-20', 28, 76, 'MALE', 'WHITE', 'Academia Cordillera', 'c-white', 'Adulto blanco', 15000, 'paid', 'Transferencia'),
+      ('er4', 'ev1', 'spectator', null, 'Ana Fuentes', 'ana.fuentes@demo.cl', '', '16.444.444-4', '', null, null, '', '', '', 'entrada', 'Entrada asistente', 5000, 'paid', 'Mercado Pago')
     on conflict (id) do update set status = excluded.status
   `);
   console.log('OK seed');

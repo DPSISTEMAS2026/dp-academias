@@ -101,7 +101,7 @@ export default function EventPublic({ slug, apiUrl }: Props) {
           studentId: kind === 'student' ? student?.id : undefined,
           ...form,
           weight: form.weight ? Number(form.weight) : null,
-          method: event.paid ? 'Mercado Pago' : 'Gratis',
+          method: (kind === 'spectator' ? (event.ticketPrice || 0) > 0 : event.paid) ? 'Mercado Pago' : 'Gratis',
         }),
       });
       const data = await res.json();
@@ -131,8 +131,9 @@ export default function EventPublic({ slug, apiUrl }: Props) {
           <div className="ep-meta">
             <span className="ep-chip">{formatEventWhen(event)}</span>
             {event.address && <span className="ep-chip">{event.address}</span>}
-            <span className="ep-chip">{event.paid ? `Inscripción ${formatCLP(event.price)}` : 'Sin costo'}</span>
-            {remaining != null && <span className="ep-chip">{remaining} cupos</span>}
+            <span className="ep-chip">{event.paid ? `Competencia ${formatCLP(event.price)}` : 'Competencia sin costo'}</span>
+            <span className="ep-chip">{(event.ticketPrice || 0) > 0 ? `Entrada ${formatCLP(event.ticketPrice)}` : 'Entrada sin costo'}</span>
+            {remaining != null && <span className="ep-chip">{remaining} cupos competencia</span>}
           </div>
         </div>
       </header>
@@ -140,7 +141,7 @@ export default function EventPublic({ slug, apiUrl }: Props) {
       <main className="ep-main">
         <section className="ep-card">
           <h2>Evento de ejemplo</h2>
-          <p>Así se ve la inscripción pública de un torneo o seminario. Alumnos e invitados se anotan aquí.</p>
+          <p>Así se ve la inscripción pública. Competidores se anotan con categoría IBJJF. El público compra una entrada nominativa (nombre y RUT).</p>
           {event.paid ? (
             <div className="ep-pay">
               <div className="ep-mp">
@@ -173,7 +174,11 @@ export default function EventPublic({ slug, apiUrl }: Props) {
             <div className="ep-ok">
               <div className="ep-kicker">Inscripción recibida</div>
               <h2>{done.name}</h2>
-              <p>{done.kind === 'student' ? 'Alumno de la academia' : 'Invitado'} · {done.categoryName} · {done.age ?? '—'} años</p>
+              <p>
+                {done.kind === 'spectator'
+                  ? `Asistente · RUT ${done.documentId || '—'}`
+                  : `${done.kind === 'student' ? 'Alumno de la academia' : 'Invitado'} · ${done.categoryName} · ${done.age ?? '—'} años`}
+              </p>
               <p style={{ marginTop: 12 }}>
                 {done.status === 'paid'
                   ? 'Mercado Pago confirmó el pago. Quedas inscrito.'
@@ -182,11 +187,16 @@ export default function EventPublic({ slug, apiUrl }: Props) {
             </div>
           ) : (
             <>
-              <h2>Inscripción</h2>
-              <p style={{ marginBottom: 14 }}>Completa tus datos. Si hay costo, Mercado Pago confirma el pago y quedas inscrito.</p>
+              <h2>{kind === 'spectator' ? 'Entrada de asistente' : 'Inscripción'}</h2>
+              <p style={{ marginBottom: 14 }}>
+                {kind === 'spectator'
+                  ? 'La entrada es nominativa: nombre y RUT. No se transfiere a otra persona.'
+                  : 'Completa tus datos. Si hay costo, Mercado Pago confirma el pago y quedas inscrito.'}
+              </p>
               <div className="ep-tabs">
                 <button type="button" className={kind === 'student' ? 'is-on' : ''} onClick={goAsStudent}>Soy alumno</button>
                 <button type="button" className={kind === 'guest' ? 'is-on' : ''} onClick={() => setKind('guest')}>Vengo de otra academia</button>
+                <button type="button" className={kind === 'spectator' ? 'is-on' : ''} onClick={() => setKind('spectator')}>Soy asistente</button>
               </div>
               {kind === 'student' && student && (
                 <p style={{ marginBottom: 10, fontWeight: 700, color: '#006970' }}>Inscripción con la ficha de {student.name}.</p>
@@ -196,34 +206,58 @@ export default function EventPublic({ slug, apiUrl }: Props) {
               )}
               <div className="ep-form">
                 <label>Nombre<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-                <label>Correo<input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-                <label>Teléfono<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
-                <label>RUT / documento<input value={form.documentId} onChange={(e) => setForm({ ...form, documentId: e.target.value })} /></label>
-                <label>Fecha de nacimiento<input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} /></label>
-                <label>Peso (kg)<input type="number" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} /></label>
-                <label>Género
-                  <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-                    <option value="">—</option>
-                    <option value="MALE">Masculino</option>
-                    <option value="FEMALE">Femenino</option>
-                  </select>
-                </label>
-                <label>Cinturón
-                  <select value={form.belt} onChange={(e) => setForm({ ...form, belt: e.target.value as Belt })}>
-                    {BELTS.map((b) => <option key={b} value={b}>{b === 'WHITE' ? 'Blanco' : b === 'BLUE' ? 'Azul' : b === 'PURPLE' ? 'Morado' : b === 'BROWN' ? 'Marrón' : b === 'BLACK' ? 'Negro' : 'Gris'}</option>)}
-                  </select>
-                </label>
+                {kind === 'spectator' ? (
+                  <label>RUT<input value={form.documentId} onChange={(e) => setForm({ ...form, documentId: e.target.value })} placeholder="12.345.678-9" /></label>
+                ) : (
+                  <label>Correo<input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+                )}
+                {kind !== 'spectator' && (
+                  <>
+                    <label>Teléfono<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+                    <label>RUT / documento<input value={form.documentId} onChange={(e) => setForm({ ...form, documentId: e.target.value })} /></label>
+                    <label>Fecha de nacimiento<input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} /></label>
+                    <label>Peso (kg)<input type="number" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} /></label>
+                    <label>Género
+                      <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                        <option value="">—</option>
+                        <option value="MALE">Masculino</option>
+                        <option value="FEMALE">Femenino</option>
+                      </select>
+                    </label>
+                    <label>Cinturón
+                      <select value={form.belt} onChange={(e) => setForm({ ...form, belt: e.target.value as Belt })}>
+                        {BELTS.map((b) => <option key={b} value={b}>{b === 'WHITE' ? 'Blanco' : b === 'BLUE' ? 'Azul' : b === 'PURPLE' ? 'Morado' : b === 'BROWN' ? 'Marrón' : b === 'BLACK' ? 'Negro' : 'Gris'}</option>)}
+                      </select>
+                    </label>
+                  </>
+                )}
                 {kind === 'guest' && (
                   <label className="span2">Academia de origen<input value={form.academy} onChange={(e) => setForm({ ...form, academy: e.target.value })} placeholder="Nombre de tu academia" /></label>
                 )}
-                <div className="span2" style={{ padding: '0.9rem 1rem', borderRadius: 14, background: cat.ready ? 'rgba(0,105,112,0.08)' : '#fafaf8', border: '1px solid rgba(22,22,22,0.08)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#006970', marginBottom: 6 }}>Tu categoría</div>
-                  <div style={{ fontWeight: 800, fontSize: 15 }}>{cat.fullCategoryString}</div>
-                  {cat.age > 0 && <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: '#64748b' }}>{cat.age} años · {cat.ageCategory}</div>}
-                </div>
+                {kind !== 'spectator' && (
+                  <div className="span2" style={{ padding: '0.9rem 1rem', borderRadius: 14, background: cat.ready ? 'rgba(0,105,112,0.08)' : '#fafaf8', border: '1px solid rgba(22,22,22,0.08)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#006970', marginBottom: 6 }}>Tu categoría</div>
+                    <div style={{ fontWeight: 800, fontSize: 15 }}>{cat.fullCategoryString}</div>
+                    {cat.age > 0 && <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: '#64748b' }}>{cat.age} años · {cat.ageCategory}</div>}
+                  </div>
+                )}
                 {error && <p className="ep-err span2">{error}</p>}
-                <button type="button" className={`ep-submit${event.paid ? ' ep-submit-mp' : ''}`} disabled={sending || !cat.ready} onClick={submit}>
-                  {event.paid ? (
+                <button
+                  type="button"
+                  className={`ep-submit${(kind === 'spectator' ? (event.ticketPrice || 0) > 0 : event.paid) ? ' ep-submit-mp' : ''}`}
+                  disabled={sending || (kind === 'spectator' ? (!form.name.trim() || form.documentId.replace(/[^0-9kK]/gi, '').length < 7) : !cat.ready)}
+                  onClick={submit}
+                >
+                  {kind === 'spectator' ? (
+                    (event.ticketPrice || 0) > 0 ? (
+                      <>
+                        <span>Pagar entrada · {formatCLP(event.ticketPrice)}</span>
+                        <MpLogo variant="white" height={28} />
+                      </>
+                    ) : (
+                      'Reservar entrada'
+                    )
+                  ) : event.paid ? (
                     <>
                       <span>Pagar e inscribirme · {formatCLP(event.price)}</span>
                       <MpLogo variant="white" height={28} />

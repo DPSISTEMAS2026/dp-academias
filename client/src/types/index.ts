@@ -129,7 +129,7 @@ export interface AttendanceRecord {
 
 export type EventStatus = 'draft' | 'published';
 export type EventGender = 'ANY' | 'MALE' | 'FEMALE';
-export type RegistrationKind = 'student' | 'guest';
+export type RegistrationKind = 'student' | 'guest' | 'spectator';
 export type RegistrationStatus = 'pending' | 'paid';
 
 export interface EventCategory {
@@ -159,6 +159,8 @@ export interface AcademyEvent {
     capacity: number | null;
     paid: boolean;
     price: number;
+    ticketPrice: number;
+    ticketCapacity: number | null;
     status: EventStatus;
     categories: EventCategory[];
     createdAt?: string;

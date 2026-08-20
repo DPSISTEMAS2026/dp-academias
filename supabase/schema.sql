@@ -191,6 +191,8 @@ create table if not exists public.events (
   capacity integer,
   paid boolean default true,
   price integer default 0,
+  ticket_price integer default 0,
+  ticket_capacity integer,
   status text default 'draft',
   categories jsonb default '[]'::jsonb,
   created_at timestamptz default now()
@@ -222,6 +224,10 @@ create table if not exists public.event_registrations (
 create unique index if not exists event_reg_student_unique
   on public.event_registrations (event_id, student_id)
   where student_id is not null;
+
+create unique index if not exists event_reg_spectator_doc
+  on public.event_registrations (event_id, lower(regexp_replace(coalesce(document_id, ''), '[^0-9kK]', '', 'g')))
+  where kind = 'spectator' and coalesce(document_id, '') <> '';
 
 alter table public.events enable row level security;
 alter table public.event_registrations enable row level security;

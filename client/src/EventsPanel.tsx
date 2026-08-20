@@ -22,7 +22,7 @@ export default function EventsPanel({ apiUrl }: Props) {
   const [selectedId, setSelectedId] = useState<string>('');
   const [draft, setDraft] = useState<AcademyEvent>(emptyEvent());
   const [regs, setRegs] = useState<EventRegistration[]>([]);
-  const [filter, setFilter] = useState<'all' | 'student' | 'guest' | 'pending' | 'paid'>('all');
+  const [filter, setFilter] = useState<'all' | 'student' | 'guest' | 'spectator' | 'pending' | 'paid'>('all');
   const [catFilter, setCatFilter] = useState('');
   const [hint, setHint] = useState('');
   const [saving, setSaving] = useState(false);
@@ -53,7 +53,7 @@ export default function EventsPanel({ apiUrl }: Props) {
 
   const grouped = useMemo(() => groupRegistrations(regs), [regs]);
   const shown = regs.filter((r) => {
-    if (filter === 'student' || filter === 'guest') return r.kind === filter;
+    if (filter === 'student' || filter === 'guest' || filter === 'spectator') return r.kind === filter;
     if (filter === 'pending' || filter === 'paid') return r.status === filter;
     return true;
   }).filter((r) => !catFilter || r.categoryName === catFilter);
@@ -206,11 +206,17 @@ export default function EventsPanel({ apiUrl }: Props) {
               <label className="span-all">Dirección
                 <input value={draft.address} onChange={(e) => setField('address', e.target.value)} />
               </label>
-              <label>Cupos
+              <label>Cupos competencia
                 <input type="number" value={draft.capacity ?? ''} onChange={(e) => setField('capacity', e.target.value === '' ? null : Number(e.target.value))} />
               </label>
-              <label>Precio base
+              <label>Precio competencia
                 <input type="number" value={draft.price} onChange={(e) => setField('price', Number(e.target.value) || 0)} />
+              </label>
+              <label>Cupos asistentes
+                <input type="number" value={draft.ticketCapacity ?? ''} onChange={(e) => setField('ticketCapacity', e.target.value === '' ? null : Number(e.target.value))} placeholder="Sin tope" />
+              </label>
+              <label>Precio entrada
+                <input type="number" value={draft.ticketPrice || 0} onChange={(e) => setField('ticketPrice', Number(e.target.value) || 0)} />
               </label>
               <label className="span-all">Evento pagado
                 <select value={draft.paid ? '1' : '0'} onChange={(e) => setField('paid', e.target.value === '1')}>
@@ -229,13 +235,13 @@ export default function EventsPanel({ apiUrl }: Props) {
               <div className="ev-stat"><b>{regs.length}</b><span>Total</span></div>
               <div className="ev-stat"><b>{grouped.students.length}</b><span>Alumnos</span></div>
               <div className="ev-stat"><b>{grouped.guests.length}</b><span>Invitados</span></div>
-              <div className="ev-stat"><b>{Object.keys(grouped.byCategory).length}</b><span>Categorías</span></div>
+              <div className="ev-stat"><b>{grouped.spectators.length}</b><span>Asistentes</span></div>
             </div>
             <p className="ev-when">La categoría IBJJF se calcula sola al inscribirse (edad, peso, género y cinturón).</p>
             <div className="ev-filters">
-              {(['all', 'student', 'guest', 'paid', 'pending'] as const).map((f) => (
+              {(['all', 'student', 'guest', 'spectator', 'paid', 'pending'] as const).map((f) => (
                 <button key={f} type="button" className={filter === f ? 'is-on' : ''} onClick={() => setFilter(f)}>
-                  {f === 'all' ? 'Todos' : f === 'student' ? 'Alumnos' : f === 'guest' ? 'Invitados' : f === 'paid' ? 'Pagados' : 'Pendientes'}
+                  {f === 'all' ? 'Todos' : f === 'student' ? 'Alumnos' : f === 'guest' ? 'Invitados' : f === 'spectator' ? 'Asistentes' : f === 'paid' ? 'Pagados' : 'Pendientes'}
                 </button>
               ))}
             </div>
@@ -253,7 +259,7 @@ export default function EventsPanel({ apiUrl }: Props) {
                   <tr>
                     <th>Nombre</th>
                     <th>Tipo</th>
-                    <th>Categoría</th>
+                    <th>Categoría / RUT</th>
                     <th>Edad</th>
                     <th>Estado</th>
                     <th></th>
@@ -267,8 +273,8 @@ export default function EventsPanel({ apiUrl }: Props) {
                         <strong>{r.name}</strong>
                         <div className="ev-sub">{r.academy || r.email}</div>
                       </td>
-                      <td>{r.kind === 'student' ? 'Alumno' : 'Invitado'}</td>
-                      <td>{r.categoryName}</td>
+                      <td>{r.kind === 'student' ? 'Alumno' : r.kind === 'spectator' ? 'Asistente' : 'Invitado'}</td>
+                      <td>{r.kind === 'spectator' ? (r.documentId || '—') : r.categoryName}</td>
                       <td>{r.age ?? '—'}</td>
                       <td>
                         <span className={`ev-pill${r.status === 'paid' ? '' : ' warn'}`}>

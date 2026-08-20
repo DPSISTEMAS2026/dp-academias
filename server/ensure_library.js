@@ -49,7 +49,7 @@ await client.query(`grant all on public.material_progress to anon, authenticated
 await client.query(`
   insert into public.videos (id, title, description, url, thumbnail, beltlevel, category, sede_id, format, discipline, belts, authorized_only, duration) values
     ('v1', 'Armbar desde guardia', 'Técnica base de Jiu Jitsu para cinturón blanco y azul.',
-     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+     '',
      'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=800',
      'WHITE', 'Técnicas', 1, 'video', 'Jiu Jitsu', '["WHITE","BLUE"]'::jsonb, true, '06:24'),
     ('v2', 'Reglamento de competencia', 'Bases y puntaje para alumnos que van a torneo. Documento PDF.',
@@ -57,12 +57,13 @@ await client.query(`
      'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800',
      'WHITE', 'Reglamento', 1, 'document', 'Jiu Jitsu', '["WHITE","BLUE","PURPLE"]'::jsonb, true, 'PDF'),
     ('v3', 'Caídas y desplazamientos kids', 'Material de kids para cinturón gris.',
-     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+     '',
      'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800',
      'GRAY', 'Preparación', 1, 'video', 'Jiu Jitsu', '["GRAY"]'::jsonb, true, '04:10')
   on conflict (id) do update set
     title = excluded.title,
     description = excluded.description,
+    url = excluded.url,
     format = excluded.format,
     discipline = excluded.discipline,
     belts = excluded.belts,

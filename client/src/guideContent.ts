@@ -79,8 +79,8 @@ export const ADMIN_TOPICS: GuideTopic[] = [
     id: 'eventos',
     label: 'Eventos',
     tab: 'events',
-    keywords: ['evento', 'eventos', 'torneo', 'inscripcion', 'ibjjf', 'invitado', 'seminario'],
-    answer: 'Eventos publica un seminario o un torneo y recibe inscritos. Antes un formulario de Google más una planilla aparte. Acá se anotan alumnos e invitados, y la categoría IBJJF se calcula sola con edad, peso, género y cinturón.',
+    keywords: ['evento', 'eventos', 'torneo', 'inscripcion', 'ibjjf', 'invitado', 'seminario', 'entrada', 'asistente', 'publico'],
+    answer: 'Eventos publica un seminario o un torneo. Competidores (alumno o de otra academia) se anotan con categoría IBJJF. El público compra una entrada nominativa: nombre y RUT, precio aparte, y no ocupa cupo de competencia.',
   },
   {
     id: 'finanzas',

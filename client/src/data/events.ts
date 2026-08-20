@@ -98,6 +98,8 @@ export function emptyEvent(): AcademyEvent {
     capacity: 120,
     paid: true,
     price: 15000,
+    ticketPrice: 5000,
+    ticketCapacity: null,
     status: 'draft',
     categories: [],
   };
@@ -106,11 +108,13 @@ export function emptyEvent(): AcademyEvent {
 export function groupRegistrations(rows: EventRegistration[]) {
   const students = rows.filter((r) => r.kind === 'student');
   const guests = rows.filter((r) => r.kind === 'guest');
+  const spectators = rows.filter((r) => r.kind === 'spectator');
+  const athletes = rows.filter((r) => r.kind !== 'spectator');
   const byCategory: Record<string, EventRegistration[]> = {};
-  rows.forEach((r) => {
+  athletes.forEach((r) => {
     const key = r.categoryName || 'Sin categoría';
     byCategory[key] = byCategory[key] || [];
     byCategory[key].push(r);
   });
-  return { students, guests, byCategory, paid: rows.filter((r) => r.status === 'paid'), pending: rows.filter((r) => r.status === 'pending') };
+  return { students, guests, spectators, athletes, byCategory, paid: rows.filter((r) => r.status === 'paid'), pending: rows.filter((r) => r.status === 'pending') };
 }

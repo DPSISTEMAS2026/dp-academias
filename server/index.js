@@ -2896,7 +2896,7 @@ function eventPayload(body, existing) {
         price: body.price === undefined ? Number(existing?.price || 0) : Number(body.price) || 0,
         ticket_price: body.ticketPrice === undefined && body.ticket_price === undefined
             ? Number(existing?.ticket_price || 0)
-            : Number(body.ticketPrice ?? body.ticket_price || 0),
+            : Number(body.ticketPrice ?? body.ticket_price ?? 0),
         ticket_capacity: body.ticketCapacity === undefined && body.ticket_capacity === undefined
             ? (existing?.ticket_capacity ?? null)
             : (body.ticketCapacity === '' || body.ticket_capacity === '' || body.ticketCapacity == null && body.ticket_capacity == null ? null : Number(body.ticketCapacity ?? body.ticket_capacity)),

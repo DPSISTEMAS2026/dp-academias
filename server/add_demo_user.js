@@ -97,9 +97,13 @@ async function upsertStudent(email) {
 }
 
 async function run() {
-    const email = (process.env.CONTACT_EMAIL || process.argv[2] || '').trim().toLowerCase();
+    const email = (process.argv[2] || process.env.CONTACT_EMAIL || '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
-        console.error('Uso: CONTACT_EMAIL=correo@dominio.cl node add_demo_user.js');
+        console.error('Uso: node add_demo_user.js correo@dominio.cl');
+        process.exit(1);
+    }
+    if (email === 'contacto@dpsistemas.cl') {
+        console.error('No uses este script para el seed contacto@dpsistemas.cl (admin123 / demo123).');
         process.exit(1);
     }
     if (!supabaseUrl || /qbimxygcjjmosifsqbko|xtcxbxvbtxnmuaylrhmr/.test(supabaseUrl)) {

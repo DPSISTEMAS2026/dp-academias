@@ -7,6 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: 1.25rem;
+  user-select: none;
 }
 
 .sf-panel {
@@ -57,6 +58,7 @@
   font-size: 1.45rem;
   font-weight: 600;
   letter-spacing: -0.03em;
+  user-select: none;
 }
 
 .sf-icon-btn {
@@ -206,6 +208,7 @@
   letter-spacing: 0;
   color: #161616;
   background: #fff;
+  user-select: text;
 }
 
 .sf-block {

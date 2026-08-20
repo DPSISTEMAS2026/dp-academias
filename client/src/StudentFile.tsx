@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, DollarSign, Mail, Save, Trash2, X } from 'lucide-react';
 import { MpLogo } from './MpLogo';
 import { BRAND } from './brand';
@@ -75,6 +75,7 @@ export default function StudentFile({
   const [draft, setDraft] = useState<Student>(student);
   const [saving, setSaving] = useState(false);
   const [saveHint, setSaveHint] = useState('');
+  const backdropDown = useRef(false);
   const canEdit = role === 'admin' || role === 'superadmin';
 
   useEffect(() => {
@@ -106,14 +107,41 @@ export default function StudentFile({
   const isAdmin = canEdit;
 
   return (
-    <div className="sf-overlay" onClick={onClose}>
-      <div className={`sf-panel${isMobile ? ' is-mobile' : ''}`} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="sf-overlay"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={`sf-panel${isMobile ? ' is-mobile' : ''}`}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          const t = e.target as HTMLElement;
+          if (!t.closest('.sf-icon-btn')) backdropDown.current = false;
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="sf-head">
           <div>
             <div className="sf-kicker">Ficha del alumno</div>
             <h2>{draft.name}</h2>
           </div>
-          <button type="button" className="sf-icon-btn" onClick={onClose} aria-label="Cerrar">
+          <button
+            type="button"
+            className="sf-icon-btn"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              backdropDown.current = true;
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!backdropDown.current) return;
+              backdropDown.current = false;
+              onClose();
+            }}
+            aria-label="Cerrar"
+          >
             <X size={18} />
           </button>
         </header>

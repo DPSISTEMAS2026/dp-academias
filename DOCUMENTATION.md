@@ -1,10 +1,10 @@
-# 🥋 DP SISTEMAS Y AUTOMATIZACIONES — DEMO DE PLATAFORMA
+# 🥋 DP SISTEMAS Y AUTOMATIZACIONES — PLATAFORMA PARA ACADEMIAS
 
-Documentación heredada del clon. La marca visible es **DP Sistemas**. La academia de muestra es **Academia Demo**. No usar contra la base de Ranas.
+La marca visible es **DP Sistemas**. El producto es multi-academia. La demostración pública usa **Academia Demo** (DPDEMO).
 
 
 ## 📌 1. Visión General del Sistema
-La plataforma de **Ranas Jiu Jitsu** es una aplicación web y móvil (PWA / Android / iOS) diseñada para la gestión integral de academias de Jiu Jitsu Brasileño. Permite controlar alumnos, cobros automatizados, asistencia a clases, comunicación directa por correo/WhatsApp y categorizaciones oficiales de competición bajo estándares IBJJF.
+Plataforma web y móvil (PWA / Android / iOS) para la gestión de academias. Permite controlar alumnos, cobros, asistencia, comunicación y, si aplica, categorías de competición IBJJF.
 
 ---
 

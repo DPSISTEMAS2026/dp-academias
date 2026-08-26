@@ -85,7 +85,7 @@ export default function FounderPlanSection({ onLogin }: Props) {
           <div className="dp-kicker">Planes y precios</div>
           <h2 id="dp-plans-title">Un plan claro para comenzar</h2>
           <p className="dp-lead">
-            Estamos creciendo junto a nuestras primeras academias. Por eso creamos el Plan Academia: una propuesta especial de lanzamiento que incluye la implementación, la página web y toda la plataforma de gestión.
+            El Plan Academia reúne todo en un solo precio: la implementación, la página web de tu academia y la plataforma de gestión completa. Sin módulos sueltos ni cobros por alumno.
           </p>
         </header>
 
@@ -185,7 +185,7 @@ export default function FounderPlanSection({ onLogin }: Props) {
             </div>
 
             <p className="dp-plan-legal">
-              Los valores no incluyen IVA. El precio de lanzamiento se aplica durante los primeros 12 meses desde la activación. Posteriormente se cobra el valor de renovación correspondiente a la modalidad seleccionada. Los planes semestral y anual se pagan anticipadamente para acceder al descuento.
+              Los valores no incluyen IVA. El precio publicado se aplica durante los primeros 12 meses desde la activación. Posteriormente se cobra el valor de renovación correspondiente a la modalidad seleccionada. Los planes semestral y anual se pagan anticipadamente para acceder al descuento.
             </p>
           </article>
 

@@ -1,9 +1,6 @@
-/** Comercial del Plan Fundador. Cambiar acá, no en el componente visual. */
+/** Comercial del Plan Academia. Cambiar acá, no en el componente visual. */
 
 export const founderPlanEnabled = true;
-export const founderSlotsTotal = 10;
-/** Ocupación real. No se muestra “quedan N cupos” hasta tener este dato operativo. */
-export const founderSlotsUsed = 0;
 
 export type BillingCycle = 'monthly' | 'semiannual' | 'annual';
 

@@ -1,5 +1,5 @@
 import { appPath, BRAND } from './brand';
-import { formatClp, founderPlanPrices, founderSlotsTotal } from './founderPlan';
+import { formatClp, founderPlanPrices } from './founderPlan';
 
 export type CompanyPageId = 'faq' | 'terms' | 'privacy' | 'cookies' | 'notice';
 
@@ -48,7 +48,7 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
     return {
       kicker: 'Ayuda',
       title: 'Preguntas frecuentes',
-      intro: `Resolvemos las dudas habituales sobre ${BRAND.legalName}, el Plan Fundador y el uso de la plataforma.`,
+      intro: `Resolvemos las dudas habituales sobre ${BRAND.legalName}, el Plan Academia y el uso de la plataforma.`,
       blocks: [],
       faqs: [
         {
@@ -57,7 +57,7 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
         },
         {
           q: '¿El mensual, el semestral y el anual son planes distintos?',
-          a: 'No. Es un solo producto, el Plan Fundador, con tres modalidades de pago. Cambia el periodo y el precio; no el alcance del servicio.',
+          a: 'No. Es un solo producto, el Plan Academia, con tres modalidades de pago. Cambia el periodo y el precio; no el alcance del servicio.',
         },
         {
           q: '¿Cómo solicito la demo?',
@@ -72,8 +72,8 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
           a: `Durante los primeros 12 meses desde la activación: ${formatClp(monthly.firstYearPrice)} + IVA al mes, ${formatClp(semi.firstYearPrice)} + IVA al semestre o ${formatClp(annual.firstYearPrice)} + IVA al año. Luego se aplica el valor de renovación de la misma modalidad: ${formatClp(monthly.renewalPrice)}, ${formatClp(semi.renewalPrice)} o ${formatClp(annual.renewalPrice)} + IVA, respectivamente. Semestral y anual se pagan por anticipado.`,
         },
         {
-          q: '¿Hay cupos de lanzamiento?',
-          a: `Sí. El Plan Fundador está pensado para las primeras ${founderSlotsTotal} academias que activen su suscripción. No publicamos un contador de cupos restantes si no proviene de un dato real.`,
+          q: '¿Los cupos son limitados?',
+          a: 'Sí. Trabajamos con cupos limitados para cuidar la calidad de cada implementación y del soporte. No publicamos un contador de cupos restantes si no proviene de un dato real.',
         },
         {
           q: '¿Sirve si mi academia no es de artes marciales?',
@@ -145,7 +145,7 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
         {
           heading: '5. Contenido del sitio',
           paragraphs: [
-            'La información comercial (planes, precios, cupos de lanzamiento) se actualiza en este sitio. Si un precio del sitio y el de una cotización escrita discrepan, prima lo pactado por escrito para esa academia.',
+            'La información comercial (planes, precios, disponibilidad de cupos) se actualiza en este sitio. Si un precio del sitio y el de una cotización escrita discrepan, prima lo pactado por escrito para esa academia.',
             'Los módulos que se muestran en la demostración ilustran el producto. El alcance exacto de cada implementación se confirma al activar el servicio.',
           ],
         },
@@ -169,7 +169,7 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
     return {
       kicker: 'Contrato',
       title: 'Términos y condiciones',
-      intro: `Condiciones del servicio de software para academias prestado por ${BRAND.legalName}. Al solicitar la demo, contratar el Plan Fundador o usar la plataforma, aceptas estas condiciones.`,
+      intro: `Condiciones del servicio de software para academias prestado por ${BRAND.legalName}. Al solicitar la demo, contratar el Plan Academia o usar la plataforma, aceptas estas condiciones.`,
       blocks: [
         {
           heading: '1. Partes',
@@ -189,17 +189,17 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
         {
           heading: '3. Demo',
           paragraphs: [
-            'El acceso de demostración es gratuito, por 24 horas salvo pacto distinto, y se habilita después de una conversación. La demo puede usar datos de ejemplo. No constituye un contrato indefinido ni garantiza cupo en el Plan Fundador.',
+            'El acceso de demostración es gratuito, por 24 horas salvo pacto distinto, y se habilita después de una conversación. La demo puede usar datos de ejemplo. No constituye un contrato indefinido ni garantiza cupo en el Plan Academia.',
           ],
         },
         {
-          heading: '4. Plan Fundador',
+          heading: '4. Plan Academia',
           paragraphs: [
-            'Existe un único producto comercial llamado Plan Fundador, con tres modalidades de pago: mensual, semestral y anual. No son tres planes con distinto alcance.',
-            `Precios de lanzamiento (netos, sin IVA), vigentes ${BRAND.legalUpdated}, durante los primeros 12 meses desde la activación: ${formatClp(monthly.firstYearPrice)} / mes; ${formatClp(semi.firstYearPrice)} / semestre; ${formatClp(annual.firstYearPrice)} / año.`,
+            'Existe un único producto comercial llamado Plan Academia, con tres modalidades de pago: mensual, semestral y anual. No son tres planes con distinto alcance.',
+            `Precios (netos, sin IVA), vigentes ${BRAND.legalUpdated}, durante los primeros 12 meses desde la activación: ${formatClp(monthly.firstYearPrice)} / mes; ${formatClp(semi.firstYearPrice)} / semestre; ${formatClp(annual.firstYearPrice)} / año.`,
             `Renovación, misma modalidad: ${formatClp(monthly.renewalPrice)} / mes; ${formatClp(semi.renewalPrice)} / semestre; ${formatClp(annual.renewalPrice)} / año.`,
             'Las modalidades semestral y anual se pagan por anticipado para acceder al descuento. El IVA se factura adicionalmente según la normativa chilena.',
-            `El Plan Fundador está disponible para las primeras ${founderSlotsTotal} academias que activen su suscripción, mientras esa condición comercial siga publicada.`,
+            'El Plan Academia se ofrece con cupos limitados de implementación, mientras esa condición comercial siga publicada en el sitio.',
             'Sin pago inicial de implementación y sin cobro por cantidad de alumnos. Si una academia supera unos 120 alumnos, DP avisa para revisar operación; eso no corta el alta.',
             'Las sedes no tienen tope. La mensualidad de DP se factura por perfil de cobro (cuenta de Mercado Pago u otro medio equivalente que reciba el dinero de los alumnos). Si dos sedes cobran en cuentas distintas, cada perfil paga su mensualidad. Si cobran en la misma cuenta, es una sola.',
           ],
@@ -233,13 +233,13 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
           heading: '8. Pagos de alumnos y Mercado Pago',
           paragraphs: [
             'Si el Cliente habilita cobros a alumnos (por ejemplo Mercado Pago), el contrato de ese medio de pago es entre el Cliente y el proveedor de pagos. DP no es emisor de esos cobros ni garantiza la acreditación de transferencias de terceros.',
-            'Las comisiones de pasarelas, si las hay, no están incluidas en el Plan Fundador salvo que se indique por escrito.',
+            'Las comisiones de pasarelas, si las hay, no están incluidas en el Plan Academia salvo que se indique por escrito.',
           ],
         },
         {
           heading: '9. Disponibilidad y soporte',
           paragraphs: [
-            'DP procura un servicio continuo, con mantenimiento y actualizaciones incluidas en el Plan Fundador. No se promete una disponibilidad del 100 %. Pueden existir ventanas de mantenimiento o incidentes de infraestructura de terceros (alojamiento, red, almacenamiento).',
+            'DP procura un servicio continuo, con mantenimiento y actualizaciones incluidas en el Plan Academia. No se promete una disponibilidad del 100 %. Pueden existir ventanas de mantenimiento o incidentes de infraestructura de terceros (alojamiento, red, almacenamiento).',
             `El soporte se canaliza a ${BRAND.email} o WhatsApp en días hábiles de Chile, en horario razonable de oficina, salvo incidentes graves.`,
           ],
         },
@@ -356,7 +356,7 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
           heading: '9. Menores de edad',
           paragraphs: [
             'La plataforma puede usarse en academias con niños y adolescentes. DP no decide recabar esos datos: los ingresa la academia. El Cliente debe cumplir la normativa sobre menores y obtener las autorizaciones que correspondan.',
-            'El sitio comercial no está dirigido a que un menor contrate por sí mismo el Plan Fundador.',
+            'El sitio comercial no está dirigido a que un menor contrate por sí mismo el Plan Academia.',
           ],
         },
         {

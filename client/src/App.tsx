@@ -28,139 +28,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Browser } from '@capacitor/browser';
 import { App as CapApp } from '@capacitor/app';
-
-// ─── Splash Screen ───────────────────────────────────────────────────────────
-const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
-  useEffect(() => {
-    const timer = setTimeout(onFinish, 2600);
-    return () => clearTimeout(timer);
-  }, [onFinish]);
-
-  return (
-    <motion.div
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0, scale: 1.05 }}
-      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'linear-gradient(135deg, #020408 0%, #050d0a 50%, #02090a 100%)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        gap: '2rem', overflow: 'hidden'
-      }}
-    >
-      {/* Background ambient glow */}
-      <div style={{
-        position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: '500px', height: '500px',
-        background: 'radial-gradient(circle, rgba(0,105,112,0.22) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none'
-      }} />
-      <div style={{
-        position: 'absolute', top: '30%', left: '30%',
-        width: '300px', height: '300px',
-        background: 'radial-gradient(circle, rgba(56,189,248,0.05) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none'
-      }} />
-
-      {/* Logo container */}
-      <motion.div
-        initial={{ scale: 0.4, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-        style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}
-      >
-        {/* Logo glow ring */}
-        <motion.div
-          animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '170px', height: '170px',
-            background: 'radial-gradient(circle, rgba(0,105,112,0.35) 0%, transparent 70%)',
-            borderRadius: '50%', pointerEvents: 'none'
-          }}
-        />
-        {/* Logo image */}
-        <motion.img
-          src={BRAND.logoMark}
-          alt="DP Sistemas"
-          animate={{ rotate: [0, 2, -2, 0] }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-          style={{
-            width: '150px', height: '142px',
-            objectFit: 'contain',
-            position: 'relative', zIndex: 2
-          }}
-        />
-
-        {/* Brand text */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.6 }}
-          style={{ textAlign: 'center' }}
-        >
-          <div style={{
-            fontSize: '1.6rem', fontWeight: 900, letterSpacing: '-0.5px',
-            color: '#fff', lineHeight: 1.1
-          }}>
-            DP <span style={{ color: '#1aa3ab' }}>SISTEMAS</span>
-          </div>
-          <div style={{
-            fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.25em',
-            color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginTop: '0.3rem'
-          }}>
-            {BRAND.product}
-          </div>
-        </motion.div>
-      </motion.div>
-
-      {/* Progress bar */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.8 }}
-        style={{ width: '180px', position: 'relative' }}
-      >
-        <div style={{
-          width: '100%', height: '3px',
-          background: 'rgba(255,255,255,0.08)',
-          borderRadius: '10px', overflow: 'hidden'
-        }}>
-          <motion.div
-            initial={{ width: '0%' }}
-            animate={{ width: '100%' }}
-            transition={{ duration: 2, ease: 'easeInOut', delay: 0.2 }}
-            style={{
-              height: '100%',
-              background: 'linear-gradient(90deg, #006970, #1aa3ab)',
-              borderRadius: '10px',
-              boxShadow: '0 0 10px rgba(0,105,112,0.55)'
-            }}
-          />
-        </div>
-      </motion.div>
-
-      {/* Bottom tagline */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2 }}
-        style={{
-          position: 'absolute', bottom: '3rem',
-          fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)',
-          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600
-        }}
-      >
-            DP Sistemas • Automatizaciones
-      </motion.div>
-    </motion.div>
-  );
-};
-// ─────────────────────────────────────────────────────────────────────────────
-
 import type {
   Belt,
   UserRole,
@@ -329,12 +196,6 @@ const VIDEO_CATEGORIES = [
 ];
 
 const App: React.FC = () => {
-  const [isSplashVisible, setIsSplashVisible] = useState(() => {
-    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute() || isInternalRoute() || isCompanyRoute())) return false;
-    const shown = sessionStorage.getItem('splashShown');
-    if (!shown) { sessionStorage.setItem('splashShown', '1'); return true; }
-    return false;
-  });
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window !== 'undefined' && isAuthRoute()) return 'auth';
     return (localStorage.getItem('viewMode') as ViewMode) || 'landing';
@@ -1679,15 +1540,6 @@ const App: React.FC = () => {
   if (isInternalRoute()) {
     return <InternalClicks apiUrl={API_URL} />;
   }
-
-  if (isSplashVisible) {
-    return (
-      <AnimatePresence>
-        <SplashScreen onFinish={() => setIsSplashVisible(false)} />
-      </AnimatePresence>
-    );
-  }
-  // ────────────────────────────────────────────────────────────────────────────
 
   const companyPage = typeof window !== 'undefined' ? currentCompanyPage() : null;
   const tenantPreviewHost = typeof window !== 'undefined'

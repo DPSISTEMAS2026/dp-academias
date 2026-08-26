@@ -393,7 +393,6 @@ export function getCompanyDoc(id: CompanyPageId): CompanyDoc {
           'Preferencia de vista: si estás en el landing, el acceso o el panel, para no perder el contexto al recargar.',
           'Versión de almacenamiento: evita mezclar datos de una versión anterior del producto en el mismo navegador.',
           'Identificador de sesión de uso: un código temporal para agrupar clics de la misma visita y mejorar el producto (módulos más usados, errores de flujo). Si hay sesión, puede asociarse el correo de la cuenta.',
-          'Aviso de bienvenida (splash): recordar que ya se mostró en esa pestaña.',
         ],
       },
       {

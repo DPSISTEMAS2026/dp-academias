@@ -106,7 +106,11 @@ export default function EventsPanel({ apiUrl }: Props) {
     if (!draft.id) return;
     if (DEMO_LOCK && draft.id === SEED_EVENT_ID) { demoAlert('events'); return; }
     const res = await fetch(`${apiUrl}/api/events/${draft.id}`, { method: 'DELETE' });
-    if (!res.ok) { demoAlert('events'); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setHint(err.error || 'No se pudo eliminar el evento.');
+      return;
+    }
     setSelectedId('');
     setDraft(emptyEvent());
     load();

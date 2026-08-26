@@ -33,7 +33,7 @@ export default function DemoGuide({ mode, onGo, moduleId }: Props) {
   ]);
   const logRef = useRef<HTMLDivElement>(null);
   const prevModule = useRef(moduleId);
-  const topics = (mode === 'admin' ? ADMIN_TOPICS : STUDENT_TOPICS).filter((t) => t.id !== 'demo');
+  const topics = (mode === 'admin' ? ADMIN_TOPICS : STUDENT_TOPICS).filter((t) => t.id !== 'guia');
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });

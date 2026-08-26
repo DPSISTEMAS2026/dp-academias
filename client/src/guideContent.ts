@@ -1,4 +1,4 @@
-/** Guía de la demo: solo funciones de módulos. Nada de implementación, secretos ni otros proyectos. */
+/** Guía del panel: para qué sirve cada módulo. */
 
 export type GuideTopic = {
   id: string;
@@ -31,7 +31,7 @@ const BLOCKED = [
 const PREFIX = /^(que es|que hace|para que sirve|para que es|como funciona|como uso|como se usa|mostrame|muestrame|muestra|explicame|explica|abrir|ir a|vamos a|ver|donde esta|donde queda)\s+/;
 
 export const REFUSAL =
-  'Eso no es parte del recorrido. Pregúntame por un módulo: alumnos, horarios, asistencia, pagos…';
+  'Pregúntame por un módulo: alumnos, horarios, asistencia, pagos…';
 
 export const WELCOME_ADMIN =
   'Hola. Te guío por el sitio, módulo a módulo. En cada uno te digo para qué sirve y qué trabajo a mano deja atrás: planillas, WhatsApp, listas de papel y formularios sueltos.';
@@ -118,10 +118,10 @@ export const ADMIN_TOPICS: GuideTopic[] = [
     answer: 'Ajustes concentra precios kids y adultos, día de cobro y envío de accesos. Antes esas reglas vivían en un documento o en la cabeza de quien cobra. El selector de sede, arriba a la izquierda, cambia el recinto con el que estás trabajando.',
   },
   {
-    id: 'demo',
-    label: 'Esta demo',
-    keywords: ['demo', 'recorrido', 'que puedo', 'qué puedo', 'borrar', 'candado', 'muestra', 'guia', 'guía'],
-    answer: 'Esto es una demo de DP Sistemas. Toca un módulo y te explico qué automatiza. Puedes editar, pasar lista, registrar pagos y publicar. Lo de muestra no se borra, para que el recorrido se mantenga.',
+    id: 'guia',
+    label: 'Esta guía',
+    keywords: ['demo', 'recorrido', 'que puedo', 'qué puedo', 'borrar', 'candado', 'guia', 'guía', 'ayuda'],
+    answer: 'Toca un módulo y te explico para qué sirve y qué trabajo a mano deja atrás. Puedes editar, pasar lista, registrar pagos y publicar.',
   },
 ];
 

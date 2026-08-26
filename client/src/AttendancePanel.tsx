@@ -48,7 +48,7 @@ export default function AttendancePanel({ slots, students, sedes, activeSedeId, 
       const res = await fetch(`${apiUrl}/api/attendance?date=${chileToday()}&slotId=${encodeURIComponent(id)}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.tableMissing ? 'Falta crear la tabla de asistencia. Revisa el esquema demo.' : (data.error || 'No se pudo cargar'));
+        setError(data.tableMissing ? 'No se pudo cargar la asistencia. Si el problema sigue, escríbenos.' : (data.error || 'No se pudo cargar'));
         return;
       }
       setError('');

@@ -18,7 +18,7 @@ class RootCrashBoundary extends Component<{ children: ReactNode }, { error: stri
     if (this.state.error) {
       return (
         <div style={{ fontFamily: 'Outfit, system-ui, sans-serif', padding: '2rem', color: '#161616' }}>
-          <h1 style={{ fontSize: '1.2rem' }}>La demo se detuvo</h1>
+          <h1 style={{ fontSize: '1.2rem' }}>La aplicación se detuvo</h1>
           <p style={{ color: '#64748b' }}>{this.state.error}</p>
           <button
             type="button"

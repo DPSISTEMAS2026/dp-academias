@@ -139,9 +139,17 @@ let API_URL: string = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
   : 'http://localhost:3002';
 
-const getFallbackAvatarUrl = (_name?: string) => BRAND.mascotAvatar;
-
 const studentPhoto = (student?: { avatar?: string | null } | null) => avatarSrc(student?.avatar, API_URL);
+
+function avatarOnError(e: React.SyntheticEvent<HTMLImageElement>) {
+  const img = e.currentTarget;
+  if (img.dataset.fb === '1') {
+    img.onerror = null;
+    return;
+  }
+  img.dataset.fb = '1';
+  img.src = BRAND.mascotAvatar;
+}
 
 const newsItems = [
   {
@@ -351,7 +359,10 @@ const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
   
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 1024);
+    const handleResize = () => {
+      const next = window.innerWidth <= 1024;
+      setIsMobile((prev) => (prev === next ? prev : next));
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -1868,10 +1879,10 @@ const App: React.FC = () => {
     return (
       <motion.div
         key="app-student"
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.25 }}
         style={{ background: 'var(--panel-bg)', minHeight: '100vh', color: 'var(--panel-text)', overflowX: 'hidden' }}>
         {/* Waiver / Terms Modal Check */}
         {currentUser && !currentUser.terms_accepted && (
@@ -1888,8 +1899,8 @@ const App: React.FC = () => {
 
         {/* BG Orbs */}
         <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.12) 0%, transparent 70%)', filter: 'blur(80px)', opacity: 'var(--panel-orb-opacity)' }} />
-          <div style={{ position: 'absolute', bottom: '10%', left: '-5%', width: '350px', height: '350px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.08) 0%, transparent 70%)', filter: 'blur(60px)', opacity: 'var(--panel-orb-opacity)' }} />
+          <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.12) 0%, transparent 70%)', opacity: 'var(--panel-orb-opacity)' }} />
+          <div style={{ position: 'absolute', bottom: '10%', left: '-5%', width: '350px', height: '350px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.08) 0%, transparent 70%)', opacity: 'var(--panel-orb-opacity)' }} />
         </div>
         <div style={{ maxWidth: '480px', margin: '0 auto', padding: '2rem 1.5rem 8rem', position: 'relative', zIndex: 1 }}>
 
@@ -2776,17 +2787,17 @@ const App: React.FC = () => {
   return (
     <motion.div
       key="app-admin"
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.25 }}
       style={{ background: 'var(--panel-bg)', minHeight: '100vh', display: 'flex', color: 'var(--panel-text)', overflow: 'hidden' }}>
 
 
       {/* BG */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: 0, right: '20%', width: '600px', height: '600px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.08) 0%, transparent 70%)', filter: 'blur(100px)', opacity: 'var(--panel-orb-opacity)' }} />
-        <div style={{ position: 'absolute', bottom: 0, left: '20%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.06) 0%, transparent 70%)', filter: 'blur(80px)', opacity: 'var(--panel-orb-opacity)' }} />
+        <div style={{ position: 'absolute', top: 0, right: '20%', width: '600px', height: '600px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.08) 0%, transparent 70%)', opacity: 'var(--panel-orb-opacity)' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: '20%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(5,168,106,0.06) 0%, transparent 70%)', opacity: 'var(--panel-orb-opacity)' }} />
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle at 1px 1px, var(--panel-grid-dot) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
       </div>
 
@@ -2901,7 +2912,7 @@ const App: React.FC = () => {
       </motion.nav>
 
       {/* Main content */}
-      <main className="main-content" style={{ flex: 1, padding: isMobile ? '1.5rem 1rem' : '2.5rem 3rem', position: 'relative', zIndex: 1, overflowY: 'auto' }}>
+      <main className="main-content" style={{ flex: 1, padding: isMobile ? '1.5rem 1rem' : '2.5rem 3rem', position: 'relative', zIndex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
         {/* Header */}
         <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
@@ -2913,11 +2924,17 @@ const App: React.FC = () => {
               </button>
             )}
             <div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-                Sede de ejemplo
-              </div>
+              {(() => {
+                const sedeName = sedes.find((s) => Number(s.id) === Number(activeSedeId))?.name
+                  || (isTenantAcademy(publicAcademy) ? publicAcademy.name : '')
+                  || '';
+                return sedeName ? (
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--logo-green)', letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+                    {sedeName}
+                  </div>
+                ) : null;
+              })()}
               <h1 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-1px', color: 'var(--logo-green)' }}>{tabLabels[activeTab]}</h1>
-              <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', fontWeight: 700, color: 'var(--panel-muted)' }}>Demo: se edita y se registra. No se borra el seed (alumnos, clases, material).</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }} className="mobile-hide">
@@ -2964,7 +2981,7 @@ const App: React.FC = () => {
 
 
           {activeTab === 'students' && (
-            <motion.div key="students" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            <div key="students">
               <section className="dp-card" style={{ marginBottom: '1rem' }}>
                 <div className="dp-head">
                   <div>
@@ -3036,7 +3053,7 @@ const App: React.FC = () => {
               {isMobile ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {students
-                    .filter(s => s.name.toLowerCase().includes(studentSearchTerm.toLowerCase()))
+                    .filter(s => (s.name || '').toLowerCase().includes(studentSearchTerm.toLowerCase()))
                     .filter(s => {
                       if (studentFilterPayment === 'ALL') return true;
                       if (studentFilterPayment === 'PAID') return s.isPaid;
@@ -3073,7 +3090,9 @@ const App: React.FC = () => {
                             <img
                               src={studentPhoto(student)}
                               alt=""
-                              onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(student.name); }}
+                              loading="lazy"
+                              decoding="async"
+                              onError={avatarOnError}
                             />
                           </button>
                           <div style={{ minWidth: 0 }}>
@@ -3087,7 +3106,7 @@ const App: React.FC = () => {
                                 if (cat.ready) {
                                   return (
                                     <span style={{ fontSize: '0.6rem', fontWeight: 800, background: 'rgba(5,168,106,0.12)', color: 'var(--logo-green)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
-                                      {cat.divisionName.split('/')[0].trim()}
+                                      {(cat.divisionName || '').split('/')[0].trim()}
                                     </span>
                                   );
                                 }
@@ -3144,7 +3163,7 @@ const App: React.FC = () => {
                     </thead>
                     <tbody>
                       {students
-                        .filter(s => s.name.toLowerCase().includes(studentSearchTerm.toLowerCase()))
+                        .filter(s => (s.name || '').toLowerCase().includes(studentSearchTerm.toLowerCase()))
                         .filter(s => studentFilterBelt === 'ALL' || s.belt === studentFilterBelt)
                         .filter(s => {
                           if (studentFilterPayment === 'ALL') return true;
@@ -3191,7 +3210,9 @@ const App: React.FC = () => {
                                   <img
                                     src={studentPhoto(student)}
                                     alt=""
-                                    onError={(e) => { e.currentTarget.src = getFallbackAvatarUrl(student.name); }}
+                                    loading="lazy"
+                                    decoding="async"
+                                    onError={avatarOnError}
                                   />
                                 </button>
                                 <div>
@@ -3257,7 +3278,7 @@ const App: React.FC = () => {
               )}
               </div>
               </section>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'videos' && (
@@ -4464,7 +4485,7 @@ const AcceptTermsModal: React.FC<{ student: Student, onAccept: () => void }> = (
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '1.2rem', padding: '1rem', fontSize: '0.75rem', color: '#334155', lineHeight: 1.5, whiteSpace: 'pre-line' }}>
             <h4 style={{ textAlign: 'center', margin: '0 0 1rem 0', fontWeight: 900 }}>LIBERACIÓN DE RESPONSABILIDAD</h4>
             {`${BRAND.academy.toUpperCase()}
-            Documento de ejemplo para esta demo.
+            Documento de responsabilidad.
 
             A través de este documento acepto y libero de toda responsabilidad a ${BRAND.academy}, a sus representantes, asociados, recinto que albergue actividades y/o sponsors, y a cualquier evento, de responsabilidad ante accidentes que generen lesiones y/o enfermedades, como resultado de mi participación como deportista o espectador en los entrenamientos, competencias y actividades propias de la organización.
             Por lo cual libero totalmente a ${BRAND.academy} de ser declarado responsable por lesiones que sucedan durante la práctica de la actividad deportiva o como espectador.

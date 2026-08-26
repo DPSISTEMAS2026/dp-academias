@@ -411,7 +411,7 @@ export default function StudentFile({
                   <Trash2 size={16} />
                 </button>
               ) : (
-                <button type="button" className="sf-btn ghost" onClick={onDelete} title="Bloqueado en la demo">
+                <button type="button" className="sf-btn ghost" onClick={onDelete} title="Eliminar alumno">
                   <Trash2 size={16} />
                 </button>
               )}

@@ -140,8 +140,8 @@ export default function EventPublic({ slug, apiUrl }: Props) {
 
       <main className="ep-main">
         <section className="ep-card">
-          <h2>Evento de ejemplo</h2>
-          <p>Así se ve la inscripción pública. Competidores se anotan con categoría IBJJF. El público compra una entrada nominativa (nombre y RUT).</p>
+          <h2>Inscripción</h2>
+          <p>Competidores se anotan con categoría IBJJF. El público compra una entrada nominativa (nombre y RUT).</p>
           {event.paid ? (
             <div className="ep-pay">
               <div className="ep-mp">
@@ -154,7 +154,7 @@ export default function EventPublic({ slug, apiUrl }: Props) {
 
         <section className="ep-card">
           <h2>Categoría automática</h2>
-          <p>En este evento de ejemplo no eliges categoría. Con fecha de nacimiento, peso, género y cinturón se calcula la división, igual que en la ficha del alumno.</p>
+          <p>No eliges categoría a mano. Con fecha de nacimiento, peso, género y cinturón se calcula la división, igual que en la ficha del alumno.</p>
         </section>
 
         {event.rulesUrl && (
@@ -292,7 +292,7 @@ export function OpenEventsCard({ apiUrl, variant = 'app' }: { apiUrl: string; va
     return (
       <section className="dp-section" style={{ paddingTop: 0 }}>
         <div className="dp-section-wide">
-          <div className="dp-kicker">Evento de ejemplo</div>
+          <div className="dp-kicker">Eventos</div>
           <h2 style={{ marginTop: 8 }}>Inscripción y pago, aquí mismo</h2>
           <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
             {items.map((ev) => (

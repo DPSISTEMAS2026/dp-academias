@@ -41,11 +41,11 @@ if (FORBIDDEN_SUPABASE.some((id) => supabaseUrl.includes(id)) || (supabaseUrl &&
 
 const DEMO_LOCK = process.env.DEMO_LOCK === 'true';
 const DEMO_MSG = {
-    students: 'En la demo no se pueden borrar alumnos. El recorrido usa el mismo seed.',
-    classes: 'En la demo no se pueden borrar clases del horario. Sí se pueden editar o añadir.',
-    videos: 'En la demo no se puede borrar el material.',
-    website: 'En la demo no se borra el contenido del sitio.',
-    events: 'En la demo no se borra el evento de muestra. Sí se puede editar, publicar e inscribir.',
+    students: 'En la demostración no se pueden borrar alumnos.',
+    classes: 'En la demostración no se pueden borrar clases del horario. Sí se pueden editar o añadir.',
+    videos: 'En la demostración no se puede borrar el material.',
+    website: 'En la demostración no se borra el contenido del sitio.',
+    events: 'En la demostración no se borra el evento de muestra. Sí se puede editar, publicar e inscribir.',
 };
 function demoForbidden(res, kind) {
     return res.status(403).json({ error: DEMO_MSG[kind] || 'Acción bloqueada en la demo.', demoLocked: true });

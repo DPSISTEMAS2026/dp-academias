@@ -14,17 +14,23 @@ export function appPath(path: string) {
 
 export const BRAND = {
   company: 'DP Sistemas y Automatizaciones',
+  legalName: 'DP Sistemas y Automatizaciones SpA',
   companyShort: 'DP Sistemas',
+  rut: '78.341.404-K',
+  country: 'Chile',
+  jurisdiction: 'República de Chile',
+  legalUpdated: '25 de agosto de 2026',
   academy: 'Academia Demo',
   shortName: 'DP',
   product: 'Plataforma de gestión a medida para academias',
   url: 'https://dpsistemas.cl',
+  site: 'https://academias.dpsistemas.cl',
   email: 'contacto@dpsistemas.cl',
   whatsapp: '56974342276',
   whatsappMessage: 'quisiera acceder al demo de academias',
   instagram: 'https://dpsistemas.cl',
   logo: asset('logo-dp.png'),
-  logoLight: asset('logo-dp-on-white.png'),
+  logoLight: asset('logo-dp-on-white.png') + '?v=clear',
   logoMark: asset('logo-dp-icon.png'),
   mascot: asset('mascota-dp.png'),
   mascotGuide: asset('mascota-dp-guia.png'),
@@ -37,11 +43,11 @@ export const BRAND = {
   color: '#006970',
   teal: '#006970',
   ink: '#050811',
-  demoAdmin: { email: 'contacto@dpsistemas.cl', password: 'admin123' },
-  demoStudent: { email: 'matias.soto@demo.cl', password: 'demo123' },
+  demoAdmin: { email: 'contacto@dpsistemas.cl', password: 'admin26' },
+  demoStudent: { email: 'contacto@dpsistemas.cl', password: 'alumno26' },
 } as const;
 
-export function whatsappHref(message = BRAND.whatsappMessage) {
+export function whatsappHref(message: string = BRAND.whatsappMessage) {
   return `https://wa.me/${BRAND.whatsapp}?text=${encodeURIComponent(message)}`;
 }
 
@@ -49,4 +55,11 @@ export function avatarSrc(avatar?: string | null, apiUrl = '') {
   if (!avatar || avatar === BRAND.mascot || avatar.endsWith('mascota-dp.png')) return BRAND.mascotAvatar;
   if (avatar.startsWith('http') || avatar.startsWith('data:') || avatar.includes('/mascota') || avatar.includes('/logo')) return avatar;
   return apiUrl ? `${apiUrl}${avatar}` : avatar;
+}
+
+export function academyLogoSrc(academy?: { logoUrl?: string | null } | null, apiUrl = '') {
+  const url = academy?.logoUrl;
+  if (!url || url.endsWith('mascota-dp.png')) return BRAND.logoMark;
+  if (url.startsWith('http')) return url;
+  return avatarSrc(url, apiUrl);
 }

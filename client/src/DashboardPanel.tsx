@@ -11,6 +11,8 @@ type Props = {
   students: Student[];
   slots: ClassSlot[];
   activeSedeId: number | null;
+  academyStudentCount?: number;
+  studentSoftCap?: number;
   onOpenStudent: (student: Student) => void;
   onGo: (tab: 'students' | 'payments' | 'schedule' | 'attendance' | 'grades') => void;
 };
@@ -46,7 +48,7 @@ function upcomingBirthdays(students: Student[]) {
     .slice(0, 4);
 }
 
-export default function DashboardPanel({ students, slots, activeSedeId, onOpenStudent, onGo }: Props) {
+export default function DashboardPanel({ students, slots, activeSedeId, academyStudentCount, studentSoftCap, onOpenStudent, onGo }: Props) {
   const paid = students.filter((s) => s.isPaid).length;
   const pending = students.filter((s) => !s.isPaid);
   const todayName = chileWeekday();
@@ -61,8 +63,17 @@ export default function DashboardPanel({ students, slots, activeSedeId, onOpenSt
 
   const [tab, setTab] = useState<'hoy' | 'pagos' | 'academia'>('hoy');
 
+  const cap = studentSoftCap || 120;
+  const totalAlumnos = academyStudentCount || students.length;
+  const overSoftCap = totalAlumnos >= cap;
+
   return (
     <div className="dash-wrap">
+      {overSoftCap ? (
+        <div className="dash-cap-note">
+          Llevas {totalAlumnos} alumnos (aviso a {cap}). El alta no se corta. Las sedes tampoco: si una sede cobra en otro perfil de Mercado Pago, esa sede paga su propia mensualidad de DP.
+        </div>
+      ) : null}
       <div className="dash-kpis">
         <button type="button" className="dash-kpi" onClick={() => onGo('students')}>
           <Users size={18} />

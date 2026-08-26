@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { startTelemetry } from './telemetry.ts'
+import './authFetch.ts'
 
 startTelemetry()
 

@@ -1,5 +1,5 @@
-/** Esta app es una demo comercial. El seed vive en Supabase y no se borra desde la UI. */
-export const DEMO_LOCK = true;
+/** En el producto (clientes de pago) se puede borrar con confirmación. La vitrina demo usa VITE_DEMO_LOCK=true. */
+export const DEMO_LOCK = import.meta.env.VITE_DEMO_LOCK === 'true';
 
 export const DEMO_MSG = {
   students: 'En la demo no se pueden borrar alumnos. El recorrido usa el mismo seed.',

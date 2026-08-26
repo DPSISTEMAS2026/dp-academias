@@ -47,21 +47,19 @@ function context() {
 
 function labelFrom(el: EventTarget | null) {
   if (!(el instanceof Element)) return { label: '', tag: '' };
-  if (el.closest('input[type="password"], textarea, [data-telemetry="off"]')) {
+  if (el.closest('input, textarea, [data-telemetry="off"]')) {
     return { label: '', tag: '' };
   }
-  const hit = el.closest('button, a, select, [role="button"], [role="tab"], label, summary');
-  const node = (hit || el) as HTMLElement;
-  if (node.closest('[data-telemetry="off"]')) return { label: '', tag: '' };
-  if (node.matches('input, textarea') && (node as HTMLInputElement).type !== 'button' && (node as HTMLInputElement).type !== 'submit') {
-    return { label: '', tag: '' };
-  }
-  const text = (node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80);
-  if (!text && !hit) return { label: '', tag: '' };
-  return { label: text || node.tagName.toLowerCase(), tag: node.tagName.toLowerCase() };
+  const hit = el.closest('button, a, select, [role="button"], [role="tab"], summary') as HTMLElement | null;
+  if (!hit || hit.closest('[data-telemetry="off"]')) return { label: '', tag: '' };
+
+  const named = (hit.getAttribute('aria-label') || hit.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+  const visible = (hit.innerText || '').replace(/\s+/g, ' ').trim();
+  let text = named || visible;
+  if (text.length > 48) return { label: '', tag: '' };
+  if (!text || /^button$/i.test(text)) return { label: '', tag: '' };
+
+  return { label: text.slice(0, 60), tag: hit.tagName.toLowerCase() };
 }
 
 const queue: ClickPayload[] = [];

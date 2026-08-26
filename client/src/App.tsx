@@ -171,7 +171,13 @@ import type {
   AutomationConfig,
   ClassSlot
 } from './types';
-import { BRAND, avatarSrc, appPath } from './brand';
+import { BRAND, avatarSrc, academyLogoSrc, appPath } from './brand';
+import { fetchPublicAcademy, isTenantAcademy, type PublicAcademy } from './tenant';
+import AcademyLanding from './AcademyLanding';
+import { saveAuthToken } from './authFetch';
+import { uploadAcademyDataUrl, uploadAcademyFile } from './uploadAcademyImage';
+import { studentSoftCap } from './founderPlan';
+import { clearPublicCache } from './publicCache';
 
 function isInternalRoute() {
   const p = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -222,6 +228,8 @@ function goHomeUrl() {
 }
 import { MpLogo } from './MpLogo';
 import ProductLanding from './ProductLanding';
+import CompanyPage from './CompanyPage';
+import { currentCompanyPage, isCompanyRoute } from './companySite';
 import StudentFile from './StudentFile';
 import SchedulePanel from './SchedulePanel';
 import AttendancePanel from './AttendancePanel';
@@ -241,13 +249,13 @@ import { planLabel, planWeeklyMax } from './data/plans';
 import { currentRankLabel, formatShortDate, withProgress } from './data/grades';
 import { calculateIBJJFCategory } from './data/ibjjf';
 import BeltPath from './BeltPath';
-import { demoAlert } from './demo';
+import { DEMO_LOCK, demoAlert } from './demo';
 import ModuleBoundary from './ModuleBoundary';
 import DemoGuide from './DemoGuide.tsx';
 
 // Este origen (localhost:5173) corrió antes la app de Ranas. Sin esto,
 // localStorage restaura alumnos, fotos y sesión de esa academia.
-const DP_STORAGE_VERSION = 'dp-demo-v2';
+const DP_STORAGE_VERSION = 'dp-tenant-v1';
 if (typeof window !== 'undefined' && localStorage.getItem('__dp_storage_version') !== DP_STORAGE_VERSION) {
   localStorage.clear();
   sessionStorage.clear();
@@ -322,7 +330,7 @@ const VIDEO_CATEGORIES = [
 
 const App: React.FC = () => {
   const [isSplashVisible, setIsSplashVisible] = useState(() => {
-    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute() || isInternalRoute())) return false;
+    if (typeof window !== 'undefined' && (isAuthRoute() || isEventRoute() || isInternalRoute() || isCompanyRoute())) return false;
     const shown = sessionStorage.getItem('splashShown');
     if (!shown) { sessionStorage.setItem('splashShown', '1'); return true; }
     return false;
@@ -341,6 +349,10 @@ const App: React.FC = () => {
     return s && s !== 'null' ? Number(s) : null;
   });
   const [sedes, setSedes] = useState<any[]>([]);
+  const [academyStudentCount, setAcademyStudentCount] = useState(0);
+  const lastPanelAt = useRef(0);
+  const lastPanelKey = useRef('');
+  const PANEL_TTL_MS = 10 * 60 * 1000;
   const [classSlots, setClassSlots] = useState<ClassSlot[]>(DEFAULT_SLOTS);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [currentUser, setCurrentUser] = useState<Student | null>(() => {
@@ -353,6 +365,32 @@ const App: React.FC = () => {
   });
   const [multiStudentAuthOptions, setMultiStudentAuthOptions] = useState<Student[]>([]);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [publicAcademy, setPublicAcademy] = useState<PublicAcademy | null>(null);
+
+  useEffect(() => {
+    fetchPublicAcademy(API_URL).then(setPublicAcademy).catch(() => setPublicAcademy({ marketing: true }));
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const tenant = isTenantAcademy(publicAcademy);
+    const color = tenant && publicAcademy.color ? publicAcademy.color : '';
+    if (color) {
+      root.style.setProperty('--logo-green', color);
+      root.style.setProperty('--brand-teal', color);
+      root.style.setProperty('--logo-green-bright', `color-mix(in srgb, ${color} 78%, white)`);
+      root.style.setProperty('--logo-green-soft', `color-mix(in srgb, ${color} 12%, transparent)`);
+      root.style.setProperty('--panel-green-bg', `color-mix(in srgb, ${color} 8%, transparent)`);
+      root.style.setProperty('--panel-green-border', `color-mix(in srgb, ${color} 28%, transparent)`);
+    } else {
+      root.style.removeProperty('--logo-green');
+      root.style.removeProperty('--brand-teal');
+      root.style.removeProperty('--logo-green-bright');
+      root.style.removeProperty('--logo-green-soft');
+      root.style.removeProperty('--panel-green-bg');
+      root.style.removeProperty('--panel-green-border');
+    }
+  }, [publicAcademy]);
 
   // PWA States and Logic
   const [isIOSStandalone, setIsIOSStandalone] = useState<boolean>(false);
@@ -458,7 +496,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isEventRoute() || isInternalRoute()) return;
+    if (isEventRoute() || isInternalRoute() || isCompanyRoute()) return;
     if (viewMode === 'auth') goAuthUrl();
     if (viewMode === 'landing') goHomeUrl();
     if (viewMode === 'app' && isAuthRoute()) goHomeUrl();
@@ -467,6 +505,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const onPop = () => {
       if (isEventRoute() || isInternalRoute()) return;
+      if (isCompanyRoute()) {
+        setViewMode('landing');
+        return;
+      }
       if (isAuthRoute()) setViewMode('auth');
       else if (viewMode !== 'app') setViewMode('landing');
     };
@@ -705,7 +747,13 @@ const App: React.FC = () => {
   }, [liveNews.length]);
 
   // API Data Loading (Scoped by Sede)
-  const fetchDataForSede = async (sedeId: number | null) => {
+  const fetchDataForSede = async (sedeId: number | null, force = false) => {
+    const key = String(sedeId ?? 'all');
+    const age = Date.now() - lastPanelAt.current;
+    const skip = !force && lastPanelKey.current === key && age < PANEL_TTL_MS;
+    if (skip) return;
+    lastPanelKey.current = key;
+    lastPanelAt.current = Date.now();
     const queryParams = sedeId ? `?sedeId=${sedeId}` : '';
 
     // Carga ultrarrápida e independiente de videos (< 1 seg)
@@ -764,6 +812,8 @@ const App: React.FC = () => {
       const sedesData = await sedesRes.json().catch(() => []);
 
       setStudents(studentsData || []);
+      const academyCount = Number(studentsRes.headers.get('X-Academy-Student-Count') || (studentsData || []).length);
+      setAcademyStudentCount(academyCount);
       setSedes(sedesData || []);
       if (newsData !== null) setLiveNews(newsData);
       if (galleryData !== null) setLiveGallery(galleryData);
@@ -788,18 +838,17 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    if (viewMode !== 'app') return;
     fetchDataForSede(activeSedeId);
-  }, [activeSedeId]);
+  }, [activeSedeId, viewMode]);
 
   // Fix 2: Detectar retorno desde Mercado Pago y refrescar datos
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get('payment');
     if (paymentStatus === 'success') {
-      // Limpiar URL sin recargar página
       window.history.replaceState({}, '', window.location.pathname);
-      // Refrescar datos desde el servidor para que el estado de pago se actualice
-      fetchDataForSede(activeSedeId);
+      if (viewMode === 'app') fetchDataForSede(activeSedeId, true);
       alert('✅ ¡Pago realizado con éxito! Tu estado ha sido actualizado.');
     } else if (paymentStatus === 'failure') {
       window.history.replaceState({}, '', window.location.pathname);
@@ -837,7 +886,7 @@ const App: React.FC = () => {
     if (!_isCapacitor) return;
     let listener: any;
     CapApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) {
+      if (isActive && viewMode === 'app') {
         Browser.close().catch(() => {});
         fetchDataForSede(activeSedeId);
       }
@@ -846,7 +895,7 @@ const App: React.FC = () => {
       if (listener) listener.remove();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSedeId]);
+  }, [activeSedeId, viewMode]);
 
 
 
@@ -862,6 +911,7 @@ const App: React.FC = () => {
       if (response.ok) {
         const saved = await response.json().catch(() => slots);
         setClassSlots(Array.isArray(saved) && saved.length ? saved : slots);
+        clearPublicCache();
       } else {
         alert('No se pudo guardar el horario.');
       }
@@ -877,13 +927,22 @@ const App: React.FC = () => {
     try {
       const endpoint = type === 'hero-videos' ? 'hero-videos' : type;
       const queryParams = (type !== 'hero-videos' && activeSedeId) ? `?sedeId=${activeSedeId}` : '';
-      await fetch(`${API_URL}/api/${endpoint}${queryParams}`, {
+      const response = await fetch(`${API_URL}/api/${endpoint}${queryParams}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'No se pudo guardar el cambio en el sitio.');
+        return false;
+      }
+      clearPublicCache();
+      return true;
     } catch (e) {
       console.error(`Error syncing ${type}:`, e);
+      alert('Error de conexión al guardar el sitio.');
+      return false;
     }
   };
 
@@ -965,17 +1024,39 @@ const App: React.FC = () => {
 
 
 
-  const handleDeleteStudent = async (_studentId: string) => {
-    demoAlert('students');
+  const handleDeleteStudent = async (studentId: string) => {
+    if (DEMO_LOCK) {
+      demoAlert('students');
+      return;
+    }
+    const student = students.find((s) => String(s.id) === String(studentId));
+    const name = student?.name || 'este alumno';
+    if (!window.confirm(`¿Eliminar a ${name}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/students/${encodeURIComponent(studentId)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'No se pudo eliminar el alumno.');
+        return;
+      }
+      setStudents((prev) => prev.filter((s) => String(s.id) !== String(studentId)));
+      setSelectedStudent(null);
+      setIsEditingStudent(false);
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      alert('Error de conexión al eliminar.');
+    }
   };
 
 
-  const handleGenericImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
+  const handleGenericImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => callback(reader.result as string);
-    reader.readAsDataURL(file);
+    uploadAcademyFile(API_URL, file)
+      .then(callback)
+      .catch((err) => alert(err?.message || 'No se pudo subir la imagen a Cloudflare.'));
   };
 
   // Helper: saber si un alumno ya pagó en el mes actual
@@ -1178,7 +1259,7 @@ const App: React.FC = () => {
       const sWidth = C / scale;
       const sHeight = C / scale;
 
-      const TARGET_SIZE = 800;
+      const TARGET_SIZE = 256;
       const canvas = document.createElement('canvas');
       canvas.width = TARGET_SIZE;
       canvas.height = TARGET_SIZE;
@@ -1188,18 +1269,17 @@ const App: React.FC = () => {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Draw exact cropped source box to 800x800 destination
       ctx.drawImage(cropImageObj, sx, sy, sWidth, sHeight, 0, 0, TARGET_SIZE, TARGET_SIZE);
-      
-      // Lossless PNG format for crisp 100% sharp text, logos and edges with 0 JPEG blur/pixelation
-      const base64Image = canvas.toDataURL('image/png');
-      
-      const updatedStudent = { ...targetStudent, avatar: base64Image } as Student;
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+      const avatarUrl = await uploadAcademyDataUrl(API_URL, dataUrl);
+
+      const updatedStudent = { ...targetStudent, avatar: avatarUrl } as Student;
       
       const saveResponse = await fetch(`${API_URL}/api/students/${targetStudent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatar: base64Image })
+        body: JSON.stringify({ avatar: avatarUrl })
       });
 
       if (saveResponse.ok) {
@@ -1221,7 +1301,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('Error saving cropped avatar:', error);
-      alert('❌ Error al procesar la imagen.');
+      alert(error instanceof Error ? error.message : 'Error al procesar la imagen.');
     } finally {
       setIsCroppingSave(false);
     }
@@ -1290,7 +1370,7 @@ const App: React.FC = () => {
         return;
       }
       setViewMode('app');
-      fetchDataForSede(sId);
+      fetchDataForSede(sId, true);
     };
 
     if (studentToLogin) {
@@ -1303,18 +1383,27 @@ const App: React.FC = () => {
       const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
+        body: JSON.stringify({
+          email: authEmail,
+          password: authPassword,
+          slug: publicAcademy?.slug || localStorage.getItem('academiaSlug') || undefined,
+        })
       });
       const data = await response.json();
 
       if (response.ok && data.success) {
+        saveAuthToken(data.token);
+        if (data.role === 'dp_staff') {
+          window.location.assign(appPath('/interno'));
+          return;
+        }
         if (data.role === 'superadmin') {
           setRole('superadmin');
           localStorage.setItem('role', 'superadmin');
           setActiveSedeId(null);
           localStorage.removeItem('activeSedeId');
           setViewMode('app');
-          fetchDataForSede(null);
+          fetchDataForSede(null, true);
         } else if (data.role === 'admin_sede' || data.role === 'admin') {
           setRole('admin');
           localStorage.setItem('role', 'admin');
@@ -1322,7 +1411,7 @@ const App: React.FC = () => {
           setActiveSedeId(sId);
           localStorage.setItem('activeSedeId', sId.toString());
           setViewMode('app');
-          fetchDataForSede(sId);
+          fetchDataForSede(sId, true);
         } else if (data.role === 'student') {
           const loggedStudent = data.student;
           
@@ -1440,13 +1529,16 @@ const App: React.FC = () => {
       });
       if (response.ok) {
         const savedStudent = await response.json();
+        const capWarning = savedStudent.capWarning;
+        delete savedStudent.capWarning;
         setStudents([...students, savedStudent]);
+        if (typeof capWarning?.count === 'number') setAcademyStudentCount(capWarning.count);
         setNewStudentData({ name: '', email: '', phone: '', birthDate: '', documentId: '', belt: 'WHITE' as Belt, plan: '3', monthlyFee: 40000, discountCategory: '', discountPercentage: 0, sedeId: '' });
         setIsAddingStudent(false);
         if (existingStudentSameEmail) {
-          alert(`✅ Familiar registrado con éxito.\nSe asignó automáticamente la misma clave de acceso para vincular las cuentas.`);
+          alert(`Alumno familiar registrado. Se asignó la misma clave de acceso para vincular las cuentas.${capWarning ? `\n\nAviso: la academia tiene ${capWarning.count} alumnos (referencia ${capWarning.softCap}). El alta no se corta.` : ''}`);
         } else {
-          alert(`✅ Alumno registrado con éxito.\n\nClave provisional: ${generatedPassword}`);
+          alert(`Alumno registrado.\n\nClave provisional: ${generatedPassword}${capWarning ? `\n\nAviso: la academia tiene ${capWarning.count} alumnos (referencia ${capWarning.softCap}). El alta no se corta.` : ''}`);
         }
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -1597,7 +1689,30 @@ const App: React.FC = () => {
   }
   // ────────────────────────────────────────────────────────────────────────────
 
+  const companyPage = typeof window !== 'undefined' ? currentCompanyPage() : null;
+  const tenantPreviewHost = typeof window !== 'undefined'
+    && window.location.hostname.endsWith('.localhost')
+    && window.location.hostname !== 'localhost';
+  if (companyPage && !tenantPreviewHost) {
+    return (
+      <CompanyPage
+        page={companyPage}
+        onLogin={() => {
+          window.history.pushState({}, '', appPath('/acceso'));
+          setViewMode('auth');
+        }}
+      />
+    );
+  }
+
   if (viewMode === 'landing') {
+    const waitingTenant = typeof window !== 'undefined' && window.location.hostname.endsWith('.localhost') && publicAcademy === null;
+    if (waitingTenant) {
+      return <div style={{ padding: '2rem', fontFamily: 'Outfit, system-ui' }}>Cargando academia…</div>;
+    }
+    if (isTenantAcademy(publicAcademy)) {
+      return <AcademyLanding academy={publicAcademy} apiUrl={API_URL} onLogin={() => setViewMode('auth')} />;
+    }
     return <ProductLanding onEnter={() => setViewMode('auth')} apiUrl={API_URL} />;
   }
 
@@ -1635,16 +1750,15 @@ const App: React.FC = () => {
           }}
         >
           <div style={{ position: 'relative', display: 'inline-flex', marginBottom: window.innerWidth < 1024 ? '0' : '2.5rem' }}>
-            <img src={BRAND.logoMark} alt="DP Sistemas" style={{ width: window.innerWidth < 1024 ? '132px' : '112px', height: window.innerWidth < 1024 ? '124px' : '106px', objectFit: 'contain', display: 'block' }} />
+            <img src={academyLogoSrc(publicAcademy, API_URL)} alt="" style={{ width: window.innerWidth < 1024 ? '132px' : '112px', height: window.innerWidth < 1024 ? '124px' : '106px', objectFit: 'contain', display: 'block' }} />
           </div>
           <div className="desktop-only" style={{ width: '100%', textAlign: 'inherit', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block', marginTop: '2.5rem' }}>DP Sistemas y Automatizaciones</span>
+            <span style={{ color: 'var(--logo-green)', fontWeight: 900, letterSpacing: '0.4em', fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: '1.5rem', display: 'block', marginTop: '2.5rem' }}>{isTenantAcademy(publicAcademy) ? publicAcademy.name : 'DP Sistemas y Automatizaciones'}</span>
             <h1 style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', color: '#111', marginBottom: '2rem', lineHeight: 1, letterSpacing: '-2px' }}>
-              Entra a la<br />
-              <span style={{ color: 'var(--logo-green)' }}>demo.</span>
+              {isTenantAcademy(publicAcademy) ? <>Entra a tu<br /><span style={{ color: 'var(--logo-green)' }}>academia.</span></> : <>Entra a la<br /><span style={{ color: 'var(--logo-green)' }}>demo.</span></>}
             </h1>
             <p style={{ fontSize: '1.1rem', color: 'rgba(17,17,17,0.55)', maxWidth: '400px', lineHeight: 1.6, fontWeight: 500 }}>
-              Acceso habilitado por 24 horas a un correo específico, después de la reunión.
+              {isTenantAcademy(publicAcademy) ? 'Admin y alumnos de esta academia. El contenido público sale en la landing con widgets.' : 'Acceso habilitado por 24 horas a un correo específico, después de la reunión.'}
             </p>
           </div>
         </motion.div>
@@ -2853,11 +2967,13 @@ const App: React.FC = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: isMobile ? '0.4rem 2.6rem 0.15rem' : '0.35rem 0 0.1rem' }}>
             <img
-              src={BRAND.logoMark}
-              alt="DP Sistemas"
+              src={academyLogoSrc(publicAcademy, API_URL)}
+              alt={publicAcademy?.name || 'Academia'}
               style={{ width: isMobile ? '120px' : '148px', height: isMobile ? '114px' : '140px', objectFit: 'contain', display: 'block' }}
             />
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: '0.55rem' }}>Panel administración</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: '0.55rem' }}>
+              {isTenantAcademy(publicAcademy) ? publicAcademy.name : 'Panel administración'}
+            </div>
           </div>
 
           {role === 'superadmin' && sedes.length > 0 && (
@@ -2982,6 +3098,8 @@ const App: React.FC = () => {
                 students={students}
                 slots={classSlots}
                 activeSedeId={activeSedeId}
+                academyStudentCount={academyStudentCount}
+                studentSoftCap={studentSoftCap}
                 onOpenStudent={setSelectedStudent}
                 onGo={(tab) => {
                   if (tab === 'students') setStudentFilterPayment('ALL');
@@ -3609,33 +3727,15 @@ const App: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 900 }}>Hero Videos <br/><span style={{ fontSize: '0.7rem', opacity: 0.5 }}>(Slider Principal)</span></h3>
                   <button className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.7rem' }} onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'video/mp4';
-                    input.onchange = async (e: any) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      
-                      try {
-                        const response = await fetch(`${API_URL}/api/upload`, {
-                          method: 'POST',
-                          headers: { 'X-Filename': file.name },
-                          body: file
-                        });
-                        if (response.ok) {
-                          const data = await response.json();
-                          const url = `${API_URL}${data.url}`;
-                          const updated = [...liveHeroVideos, url];
-                          setLiveHeroVideos(updated);
-                          syncWebsite('hero-videos', updated);
-                        } else {
-                          alert('Error al subir el archivo');
-                        }
-                      } catch (error) {
-                        console.error('Error uploading:', error);
-                      }
-                    };
-                    input.click();
+                    const url = window.prompt('Pega el enlace de YouTube. No subas el archivo al servidor.');
+                    if (!url) return;
+                    if (!/youtu\.?be/i.test(url)) {
+                      alert('Usa un enlace de YouTube. Los videos no se alojan en el servidor.');
+                      return;
+                    }
+                    const updated = [...liveHeroVideos, url.trim()];
+                    setLiveHeroVideos(updated);
+                    syncWebsite('hero-videos', updated);
                   }}><Plus size={14}/> Añadir</button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -3643,7 +3743,12 @@ const App: React.FC = () => {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1.2rem', border: '1px solid var(--panel-border)' }}>
                       <div style={{ width: '60px', height: '40px', background: '#000', borderRadius: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={14} /></div>
                       <div style={{ flex: 1, fontSize: '0.75rem', color: 'var(--panel-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.split('/').pop()}</div>
-                      <button style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.5rem' }} onClick={() => demoAlert('website')}><X size={16} /></button>
+                      <button style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.5rem' }} onClick={async () => {
+                        if (DEMO_LOCK) { demoAlert('website'); return; }
+                        if (!window.confirm('¿Quitar este video de la portada?')) return;
+                        const updated = liveHeroVideos.filter((_, idx) => idx !== i);
+                        if (await syncWebsite('hero-videos', updated)) setLiveHeroVideos(updated);
+                      }}><X size={16} /></button>
                     </div>
                   ))}
                 </div>
@@ -3676,7 +3781,12 @@ const App: React.FC = () => {
                         <div style={{ fontSize: '0.7rem', color: 'var(--panel-muted)' }}>{news.date}</div>
                         <div style={{ fontSize: '0.65rem', color: 'var(--logo-green)', fontWeight: 900, marginTop: '0.4rem' }}>{news.label}</div>
                       </div>
-                      <button style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', background: 'rgba(148,163,184,0.15)', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem' }} onClick={() => demoAlert('website')}><X size={14} /></button>
+                      <button style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', background: 'rgba(148,163,184,0.15)', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem' }} onClick={async () => {
+                        if (DEMO_LOCK) { demoAlert('website'); return; }
+                        if (!window.confirm(`¿Eliminar la noticia «${news.title || 'sin título'}»?`)) return;
+                        const updated = liveNews.filter((_, idx) => idx !== i);
+                        if (await syncWebsite('news', updated)) setLiveNews(updated);
+                      }}><X size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -3698,7 +3808,12 @@ const App: React.FC = () => {
                       <img src={photo.img} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', display: 'flex', gap: '0.4rem' }}>
                         <div style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '0.3rem 0.6rem', borderRadius: '0.6rem', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase' }}>{photo.size}</div>
-                        <button style={{ background: '#e2e8f0', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => demoAlert('website')}><X size={14} /></button>
+                        <button style={{ background: '#e2e8f0', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={async () => {
+                          if (DEMO_LOCK) { demoAlert('website'); return; }
+                          if (!window.confirm('¿Quitar esta foto de la galería?')) return;
+                          const updated = liveGallery.filter((_, idx) => idx !== i);
+                          if (await syncWebsite('gallery', updated)) setLiveGallery(updated);
+                        }}><X size={14} /></button>
                       </div>
                     </div>
                   ))}
@@ -3961,6 +4076,7 @@ const App: React.FC = () => {
               onCreatePaymentLink={() => handleCreatePaymentLink(selectedStudent)}
               onSendReminder={() => handleSendPaymentReminder(selectedStudent)}
               onDelete={() => handleDeleteStudent(selectedStudent.id)}
+              allowDelete={!DEMO_LOCK}
               onManualPay={(draft) => {
                 if (!window.confirm(`¿Registrar pago manual de ${draft.name} por ${formatCLP(draft.monthlyFee || 0)}?`)) return;
                 const todayStr = new Date().toISOString().split('T')[0];

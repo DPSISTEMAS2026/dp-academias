@@ -4,9 +4,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { BRAND, whatsappHref, asset } from './brand';
+import { BRAND, whatsappHref, asset, appPath } from './brand';
 import { MpLogo } from './MpLogo';
 import { OpenEventsCard } from './EventPublic';
+import FounderPlanSection from './FounderPlanSection';
+import SiteFooter from './SiteFooter';
+import { companyHref } from './companySite';
 import { AnimatePresence, motion } from 'framer-motion';
 import './ProductLanding.css';
 
@@ -44,6 +47,12 @@ const SLIDES = [
 ];
 
 const STORIES = [
+  {
+    kicker: 'Quiénes somos',
+    title: 'Somos DP Sistemas.',
+    text: 'Nacemos para quitar peso a lo que los grandes software no amoldan a una academia. Herramientas digitales a un precio accesible.',
+    logo: true as const,
+  },
   {
     kicker: 'Panel',
     title: 'El panel de administración de tu academia.',
@@ -117,7 +126,9 @@ const STORIES = [
 function StoryDeck() {
   const [i, setI] = useState(0);
   const [hold, setHold] = useState(false);
+  const [inView, setInView] = useState(false);
   const [dir, setDir] = useState(1);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const startX = useRef<number | null>(null);
   const story = STORIES[i];
   const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -132,16 +143,31 @@ function StoryDeck() {
   }, []);
 
   useEffect(() => {
-    if (hold) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0.4 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!inView || hold) return;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) return;
     const timer = window.setInterval(() => step(1), 6500);
     return () => window.clearInterval(timer);
-  }, [hold, step]);
+  }, [inView, hold, step]);
+
+  const isAbout = 'logo' in story && story.logo;
 
   return (
     <div
-      className="dp-story"
+      ref={rootRef}
+      className={`dp-story${isAbout ? ' is-about' : ''}`}
+      id="somos"
       aria-roledescription="carrusel"
       aria-label="Plataforma"
       onMouseEnter={() => setHold(true)}
@@ -173,8 +199,8 @@ function StoryDeck() {
                 <h2>{story.title}</h2>
                 <p>{story.text}</p>
               </div>
-              <div className="dp-story-mock" aria-hidden="true">
-                <img src={story.mockup} alt="" />
+              <div className={`dp-story-mock${'logo' in story && story.logo ? ' is-logo' : ''}`} aria-hidden="true">
+                <img src={'logo' in story && story.logo ? BRAND.logoLight : story.mockup} alt="" />
               </div>
               <div className="dp-story-cta">
                 {'mp' in story && story.mp ? <MpLogo height={36} /> : null}
@@ -247,15 +273,18 @@ export default function ProductLanding({ onEnter, apiUrl }: Props) {
   return (
     <div className="dp-landing">
       <nav className="dp-nav">
-        <a className="dp-nav-brand" href={BRAND.url} target="_blank" rel="noreferrer">
-          <img src={BRAND.logoMark} alt="DP Sistemas" />
+        <a className="dp-nav-brand" href={appPath('/')}>
+          <img src={BRAND.logoMark} alt="DP Sistemas y Automatizaciones" />
           <div>
             <div className="dp-brand-name">DP Sistemas</div>
             <div className="dp-brand-sub">y Automatizaciones</div>
           </div>
         </a>
         <div className="dp-nav-actions">
+          <a className="dp-nav-link" href="#somos">Quiénes somos</a>
           <a className="dp-nav-link" href="#plataforma">Qué es</a>
+          <a className="dp-nav-link" href="#planes">Planes</a>
+          <a className="dp-nav-link" href={companyHref('/preguntas')}>Preguntas</a>
           <a className="dp-btn dp-btn-ghost" href={whatsappHref()} target="_blank" rel="noopener noreferrer">Solicitar acceso</a>
         </div>
       </nav>
@@ -314,19 +343,11 @@ export default function ProductLanding({ onEnter, apiUrl }: Props) {
 
       <section className="dp-section dp-platform" id="plataforma">
         <div className="dp-section-wide">
-          <div className="dp-platform-head">
-            <div>
-              <div className="dp-kicker">Plataforma</div>
-              <h2>Panel de administración y página web para tu academia.</h2>
-            </div>
-            <p className="dp-lead">
-              Esta demo es de academias de artes marciales. Si haces pilates, yoga u otra disciplina, te ayudamos de la misma manera.
-            </p>
-          </div>
-
           <StoryDeck />
         </div>
       </section>
+
+      <FounderPlanSection onLogin={onEnter} />
 
       {apiUrl ? <OpenEventsCard apiUrl={apiUrl} variant="landing" /> : null}
 
@@ -349,18 +370,7 @@ export default function ProductLanding({ onEnter, apiUrl }: Props) {
         </div>
       </section>
 
-      <footer className="dp-footer">
-        <a className="dp-footer-brand" href={BRAND.url} target="_blank" rel="noreferrer">
-          <img src={BRAND.logoMark} alt="DP Sistemas" />
-          <div>
-            <strong>DP Sistemas</strong>
-            <span>y Automatizaciones</span>
-          </div>
-        </a>
-        <a className="dp-btn dp-btn-solid" href={whatsappHref()} target="_blank" rel="noopener noreferrer">
-          Contacto <ArrowRight size={16} />
-        </a>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

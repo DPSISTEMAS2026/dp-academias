@@ -11,16 +11,18 @@ const url = process.env.SUPABASE_URL || '';
 const password = process.env.SUPABASE_DB_PASSWORD || '';
 const projectId = url.replace('https://', '').split('.')[0];
 
-const forbidden = ['qbimxygcjjmosifsqbko', 'xtcxbxvbtxnmuaylrhmr'];
+const forbidden = ['qbimxygcjjmosifsqbko', 'xtcxbxvbtxnmuaylrhmr', 'prihphytqvpkrrwptali'];
 if (forbidden.includes(projectId)) {
-  console.error('Refusing to migrate: this project ID is Ranas production or backup.');
+  console.error('Refusing to migrate: this project ID is Ranas, the Ranas backup, or the old DEMOACADEMIAS (over quota).');
+  console.error('Create a NEW Supabase project (ideally a new org), put SUPABASE_URL + ANON KEY + DB password in .env, then run again.');
   process.exit(1);
 }
 
 const encoded = encodeURIComponent(password);
 const candidates = [
+  `postgresql://postgres.${projectId}:${encoded}@aws-0-us-west-2.pooler.supabase.com:6543/postgres`,
+  `postgresql://postgres.${projectId}:${encoded}@aws-0-us-west-2.pooler.supabase.com:5432/postgres`,
   `postgresql://postgres:${encoded}@db.${projectId}.supabase.co:5432/postgres`,
-  `postgresql://postgres.${projectId}:${encoded}@aws-0-us-east-2.pooler.supabase.com:6543/postgres`,
 ];
 
 function splitStatements(sql) {
@@ -55,7 +57,7 @@ async function tryConnect(connectionString) {
   const client = new pg.Client({
     connectionString,
     ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 6000,
+    connectionTimeoutMillis: 8000,
   });
   await client.connect();
   return client;

@@ -14,15 +14,23 @@ Clon de la plataforma de gestión (origen: Dojo Las Ranas) para **mostrar el pro
 
 | Proyecto | URL | Qué es |
 |---|---|---|
-| DOJO RANAS | `qbimxygcjjmosifsqbko.supabase.co` | Producción, en uso |
-| Copia / backup | `xtcxbxvbtxnmuaylrhmr.supabase.co` | Respaldo, no tocar |
-| Demo DP Sistemas | `prihphytqvpkrrwptali.supabase.co` | Este repo |
+| DOJO RANAS | `qbimxygcjjmosifsqbko.supabase.co` | Producción del dojo, no se toca |
+| Copia / backup | `xtcxbxvbtxnmuaylrhmr.supabase.co` | Respaldo de Ranas, no tocar |
+| Demo DP Sistemas | `ydbefwfqkimznydpybss.supabase.co` | Este repo |
+| DEMOACADEMIAS (viejo) | `prihphytqvpkrrwptali.supabase.co` | Over quota; no usar |
 
-1. Crea un **tercer** proyecto en [Supabase](https://supabase.com), por ejemplo `dp-sistemas-demo`.
-2. Copia `.env.example` a `.env` y pega `SUPABASE_URL` y `SUPABASE_ANON_KEY` de ese proyecto nuevo.
-3. En SQL Editor ejecuta, en este orden:
-   - `supabase/schema.sql`
-   - `supabase/seed.sql`
+1. Crea un **proyecto nuevo** en [Supabase](https://supabase.com) (si la org Academias está over quota, usa **otra organización**). No uses:
+   - `qbimxygcjjmosifsqbko` (Las Ranas)
+   - `xtcxbxvbtxnmuaylrhmr` (backup)
+   - `prihphytqvpkrrwptali` (DEMOACADEMIAS viejo)
+2. Copia `.env.example` a `.env` y pega `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_DB_PASSWORD` del proyecto nuevo.
+3. Crea las tablas y el seed:
+
+```bash
+npm run migrate-demo
+```
+
+O en SQL Editor, en este orden: `supabase/schema.sql` y luego el seed de `server/migrate_demo.js`.
 
 ### 2. Servidor y cliente
 

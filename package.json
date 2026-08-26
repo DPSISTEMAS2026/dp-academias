@@ -5,7 +5,12 @@
         "install-all": "npm install && cd client && npm install && cd ../server && npm install",
         "dev-client": "cd client && npm run dev",
         "dev-server": "cd server && npm run dev",
-        "dev": "concurrently \"npm run dev-client\" \"npm run dev-server\""
+        "dev": "concurrently \"npm run dev-client\" \"npm run dev-server\"",
+        "migrate-demo": "node server/migrate_demo.js",
+        "migrate-product": "node server/migrate_product.js",
+        "migrate-media": "node server/migrate_media.js",
+        "seed-dpdemo": "node server/seed_dpdemo.js",
+        "seed-diego": "node server/seed_diego.js"
     },
     "devDependencies": {
         "concurrently": "^8.2.1"

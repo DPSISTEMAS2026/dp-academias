@@ -11,6 +11,7 @@ import {
   slugify,
 } from './data/events';
 import { DEMO_LOCK, demoAlert } from './demo';
+import { uploadAcademyFile } from './uploadAcademyImage';
 import './EventsPanel.css';
 
 type Props = {
@@ -67,13 +68,15 @@ export default function EventsPanel({ apiUrl }: Props) {
   };
 
   const upload = async (file: File, kind: 'photo' | 'rules') => {
+    if (kind === 'photo') {
+      const url = await uploadAcademyFile(apiUrl, file);
+      setField('photo', url);
+      return;
+    }
     const res = await fetch(`${apiUrl}/api/upload`, { method: 'POST', headers: { 'X-Filename': file.name }, body: file });
     if (!res.ok) throw new Error('upload');
     const data = await res.json();
-    if (kind === 'photo') setField('photo', data.url);
-    else {
-      setDraft((prev) => ({ ...prev, rulesUrl: data.url, rulesName: file.name }));
-    }
+    setDraft((prev) => ({ ...prev, rulesUrl: data.url, rulesName: file.name }));
   };
 
   const save = async (status?: AcademyEvent['status']) => {
@@ -170,7 +173,7 @@ export default function EventsPanel({ apiUrl }: Props) {
             <div className="ev-row-btns">
               <label className="ev-btn ghost">
                 Subir foto
-                <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f, 'photo').catch(() => setHint('No se pudo subir la foto.')); }} />
+                <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f, 'photo').catch((err) => setHint(err?.message || 'No se pudo subir la foto.')); }} />
               </label>
               <label className="ev-btn ghost">
                 Subir bases (PDF)

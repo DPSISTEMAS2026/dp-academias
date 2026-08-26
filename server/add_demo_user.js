@@ -1,120 +1,112 @@
-import { createClient } from '@supabase/supabase-js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+import pg from 'pg';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const ADMIN_PASS = 'admin26';
-const STUDENT_PASS = 'alumno26';
-
-function nameFromEmail(email) {
-    const local = String(email).split('@')[0].replace(/[._-]+/g, ' ').trim();
-    return local.replace(/\b\w/g, (c) => c.toUpperCase()) || 'Alumno Demo';
+const url = process.env.SUPABASE_URL || '';
+const password = process.env.SUPABASE_DB_PASSWORD || '';
+const projectId = url.replace('https://', '').split('.')[0];
+if (projectId !== 'ydbefwfqkimznydpybss') {
+  console.error('Solo el proyecto de producto.');
+  process.exit(1);
 }
 
-async function nextStudentId() {
-    const { data } = await supabase.from('students').select('id');
-    const taken = (data || []).map((e) => parseInt(e.id, 10)).filter((n) => !Number.isNaN(n));
-    let n = 1;
-    while (taken.includes(n)) n += 1;
-    return String(n);
-}
+const encoded = encodeURIComponent(password);
+const candidates = [
+  `postgresql://postgres.${projectId}:${encoded}@aws-0-us-west-2.pooler.supabase.com:5432/postgres`,
+  `postgresql://postgres.${projectId}:${encoded}@aws-0-us-west-2.pooler.supabase.com:6543/postgres`,
+];
 
-async function upsertAdmin(email) {
-    const { data: existing, error } = await supabase.from('admins').select('*').eq('email', email).maybeSingle();
-    if (error) throw error;
-    if (existing) {
-        const { error: upd } = await supabase.from('admins')
-            .update({ password_hash: ADMIN_PASS, role: 'superadmin', sede_id: null })
-            .eq('id', existing.id);
-        if (upd) throw upd;
-        console.log(`Admin actualizado: ${email} / ${ADMIN_PASS}`);
-        return;
-    }
-    const { error: ins } = await supabase.from('admins').insert({
-        email,
-        password_hash: ADMIN_PASS,
-        role: 'superadmin',
-        sede_id: null,
-    });
-    if (ins) throw ins;
-    console.log(`Admin creado: ${email} / ${ADMIN_PASS}`);
-}
-
-async function upsertStudent(email) {
-    const name = nameFromEmail(email);
-    const ficha = {
-        tutorName: 'Tutor Demo',
-        tutorEmail: email,
-        tutorPhone: '+56987654321',
-        tutorRelation: 'Madre',
-        emergencyName: 'Contacto de emergencia',
-        emergencyPhone: '+56911112222',
-        emergencyRelation: 'Padre',
-        allergies: 'Ninguna',
-        discipline: 'Jiu Jitsu',
-    };
-    const row = {
-        name,
-        email,
-        password: STUDENT_PASS,
-        phone: '+56912345678',
-        belt: 'WHITE',
-        classesattended: 12,
-        classestonextbelt: 40,
-        lastpaymentmonth: '2026-08',
-        lastpaymentdate: '2026-08-05',
-        ispaid: true,
-        plan: '3',
-        monthlyfee: 35000,
-        birthdate: '1998-05-14',
-        history: [{ date: '2026-08-05', status: 'Completado', amount: 35000 }],
-        scheduledclasses: [],
-        joindate: '2025-03-01',
-        lastgrade: 'Blanco',
-        graduationdate: '2025-03-01',
-        sede_id: 1,
-        terms_accepted: true,
-        weight: 72,
-        gender: 'MALE',
-        ficha,
-    };
-
-    const { data: existing, error } = await supabase.from('students').select('id').ilike('email', email).limit(1).maybeSingle();
-    if (error) throw error;
-    if (existing) {
-        const { error: upd } = await supabase.from('students').update(row).eq('id', existing.id);
-        if (upd) throw upd;
-        console.log(`Alumno actualizado (${existing.id}): ${email} / ${STUDENT_PASS} · ${name}`);
-        return;
-    }
-    const id = await nextStudentId();
-    const { error: ins } = await supabase.from('students').insert({ id, ...row });
-    if (ins) throw ins;
-    console.log(`Alumno creado (${id}): ${email} / ${STUDENT_PASS} · ${name}`);
+async function connect() {
+  for (const cs of candidates) {
+    try {
+      const client = new pg.Client({
+        connectionString: cs,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 8000,
+      });
+      await client.connect();
+      return client;
+    } catch { /* next */ }
+  }
+  return null;
 }
 
 async function run() {
-    const email = (process.argv[2] || process.env.CONTACT_EMAIL || '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
-        console.error('Uso: node add_demo_user.js correo@dominio.cl');
-        process.exit(1);
+  const email = (process.argv[2] || '').trim().toLowerCase();
+  const name = (process.argv.slice(3).join(' ') || email.split('@')[0].replace(/[._-]+/g, ' ')).replace(/\b\w/g, (c) => c.toUpperCase());
+  if (!email || !email.includes('@')) {
+    console.error('Uso: node add_demo_user.js correo@dominio.cl "Nombre Apellido"');
+    process.exit(1);
+  }
+
+  const client = await connect();
+  if (!client) process.exit(1);
+  try {
+    await client.query(`alter table public.admins add column if not exists access_until timestamptz`);
+    await client.query(`alter table public.students add column if not exists access_until timestamptz`);
+    const academy = (await client.query(`select id from public.academias where slug = 'dpdemo'`)).rows[0];
+    const sede = (await client.query(`select id from public.sedes where academia_id = $1 order by id asc limit 1`, [academy.id])).rows[0];
+    const until = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const { rows: admins } = await client.query(
+      `select id from public.admins where academia_id = $1 and lower(email) = $2`,
+      [academy.id, email],
+    );
+    if (admins[0]) {
+      await client.query(
+        `update public.admins set password_hash = 'admin26', role = 'superadmin', access_until = $1 where id = $2`,
+        [until, admins[0].id],
+      );
+    } else {
+      await client.query(
+        `insert into public.admins (email, password_hash, role, academia_id, access_until) values ($1, 'admin26', 'superadmin', $2, $3)`,
+        [email, academy.id, until],
+      );
     }
-    if (email === 'contacto@dpsistemas.cl') {
-        console.error('No uses este script para el seed contacto@dpsistemas.cl (admin123 / demo123).');
-        process.exit(1);
+    const { rows: st } = await client.query(
+      `select id from public.students where academia_id = $1 and lower(email) = $2`,
+      [academy.id, email],
+    );
+    const ficha = JSON.stringify({
+      tutorName: 'Tutor demo',
+      tutorPhone: '+56911111111',
+      emergencyName: 'Contacto de emergencia',
+      emergencyPhone: '+56922222222',
+      allergies: 'Ninguna',
+      discipline: 'Jiu Jitsu',
+    });
+    if (st[0]) {
+      await client.query(
+        `update public.students set name = $1, password = 'alumno26', access_until = $2, ficha = $3::jsonb where id = $4`,
+        [name, until, ficha, st[0].id],
+      );
+    } else {
+      const ids = (await client.query(`select id from public.students where academia_id = $1`, [academy.id])).rows;
+      const taken = ids.map((r) => parseInt(String(r.id).split('_').pop(), 10)).filter((n) => !Number.isNaN(n));
+      let n = 1;
+      while (taken.includes(n)) n += 1;
+      await client.query(
+        `insert into public.students (
+          id, academia_id, name, email, password, phone, belt, classesattended, classestonextbelt,
+          ispaid, plan, monthlyfee, avatar, birthdate, history, scheduledclasses, joindate, sede_id,
+          terms_accepted, weight, gender, ficha, access_until
+        ) values (
+          $1, $2, $3, $4, 'alumno26', '+56900000000', 'WHITE', 12, 40, true, '3', 35000, '/mascota-dp.png',
+          '1990-01-15', '[]'::jsonb, '[]'::jsonb, $5, $6, true, 78, 'MALE', $7::jsonb, $8
+        )`,
+        [`${academy.id}_${n}`, academy.id, name, email, new Date().toISOString().slice(0, 10), sede.id, ficha, until],
+      );
     }
-    if (!supabaseUrl || /qbimxygcjjmosifsqbko|xtcxbxvbtxnmuaylrhmr/.test(supabaseUrl)) {
-        console.error('Refusing: falta SUPABASE_URL o apunta a Ranas.');
-        process.exit(1);
-    }
-    await upsertAdmin(email);
-    await upsertStudent(email);
+    console.log(JSON.stringify({ email, name, until: until.toISOString(), admin: 'admin26', alumno: 'alumno26' }));
+  } finally {
+    await client.end();
+  }
 }
 
 run().catch((e) => {
-    console.error(e);
-    process.exit(1);
+  console.error(e);
+  process.exit(1);
 });

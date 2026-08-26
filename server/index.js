@@ -9,6 +9,19 @@ import nodemailer from 'nodemailer';
 import cron from 'node-cron';
 import { DateTime } from 'luxon';
 import { calculateIBJJFCategory } from './ibjjf.js';
+import {
+    attachAuth,
+    requireAcademyAuth,
+    signToken,
+    academyByHostOrSlug,
+    academyForLogin,
+    tenantId,
+    sedeQueryAllowed,
+    internalKeyOk,
+    requestHost,
+    isDpMarketingHost,
+} from './tenantAuth.js';
+import { createPresignedPut, globalMaxBytes, maxFileBytes, r2Configured } from './r2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,7 +36,7 @@ if (FORBIDDEN_SUPABASE.some((id) => supabaseUrl.includes(id))) {
     process.exit(1);
 }
 
-const DEMO_LOCK = process.env.DEMO_LOCK !== 'false';
+const DEMO_LOCK = process.env.DEMO_LOCK === 'true';
 const DEMO_MSG = {
     students: 'En la demo no se pueden borrar alumnos. El recorrido usa el mismo seed.',
     classes: 'En la demo no se pueden borrar clases del horario. Sí se pueden editar o añadir.',
@@ -141,9 +154,154 @@ function stripMetaHistory(history) {
     return Array.isArray(history) ? history.filter((h) => h && !h._competition_info && !h._ficha && !h._progress) : [];
 }
 
+const MAX_INLINE_MEDIA = 40000;
+const STUDENT_LIST_COLS = [
+    'id', 'name', 'email', 'password', 'phone', 'belt', 'classesattended', 'classestonextbelt',
+    'lastpaymentmonth', 'lastpaymentdate', 'ispaid', 'plan', 'monthlyfee', 'avatar', 'birthdate', 'history',
+    'terms_accepted', 'scheduledclasses', 'joindate', 'lastgrade', 'graduationdate', 'sede_id',
+    'weight', 'gender', 'ficha', 'progress', 'academia_id', 'access_until',
+].join(', ');
+
+function slimMedia(value) {
+    if (value == null) return value;
+    const text = String(value);
+    if (text.startsWith('data:')) return '';
+    return text;
+}
+
+function persistMedia(value) {
+    if (value == null || value === '') return null;
+    const text = String(value);
+    if (text.startsWith('data:')) return null;
+    if (text.startsWith('/') || text.startsWith('https://') || text.startsWith('http://')) return text;
+    return null;
+}
+
+function formatStudent(s) {
+    const compEntry = Array.isArray(s.history) ? s.history.find(h => h && h._competition_info) : null;
+    const cleanHistory = stripMetaHistory(s.history);
+    const weightVal = (s.weight !== undefined && s.weight !== null) ? s.weight : (compEntry ? compEntry.weight : null);
+    const genderVal = s.gender ? s.gender : (compEntry ? compEntry.gender : null);
+    const ficha = pickFicha(s);
+    const progress = pickProgress(s);
+    return {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        password: s.password,
+        phone: s.phone,
+        belt: s.belt || 'WHITE',
+        classesAttended: s.classesattended,
+        classesToNextBelt: s.classestonextbelt,
+        lastPaymentMonth: s.lastpaymentmonth,
+        lastPaymentDate: s.lastpaymentdate,
+        isPaid: s.ispaid === true,
+        plan: s.plan,
+        monthlyFee: s.monthlyfee,
+        avatar: slimMedia(s.avatar) || '/mascota-dp.png',
+        birthDate: s.birthdate,
+        history: cleanHistory,
+        terms_accepted: s.terms_accepted === true || s.terms_accepted === 'true' || s.terms_accepted === 1,
+        scheduledClasses: Array.isArray(s.scheduledclasses) ? s.scheduledclasses : [],
+        joinDate: s.joindate || null,
+        lastGrade: s.lastgrade || null,
+        graduationDate: s.graduationdate || null,
+        evaluationDate: progress?.evaluationDate || null,
+        weight: weightVal,
+        gender: genderVal,
+        sedeId: s.sede_id || 1,
+        sede_id: s.sede_id || 1,
+        ...ficha,
+        progress: progress || undefined,
+    };
+}
+
 
 import { createClient } from '@supabase/supabase-js';
-const supabase = createClient(supabaseUrl, process.env.SUPABASE_ANON_KEY || '');
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+function demoAccessBlocked(row) {
+    if (!row?.access_until) return null;
+    if (new Date(row.access_until).getTime() > Date.now()) return null;
+    return 'El acceso de 24 horas venció. Pedí un nuevo enlace.';
+}
+
+function sessionHours(row) {
+    if (!row?.access_until) return 12;
+    return Math.max(0.05, (new Date(row.access_until).getTime() - Date.now()) / 3600000);
+}
+
+function academyIdOr401(req, res) {
+    const id = tenantId(req);
+    if (!id) {
+        res.status(401).json({ error: 'Sesión de academia requerida.' });
+        return null;
+    }
+    return id;
+}
+
+async function resolveSedeForAcademy(req, academiaId) {
+    const requested = req.query.sedeId != null && req.query.sedeId !== '' ? Number(req.query.sedeId) : null;
+    const allowed = sedeQueryAllowed(req, requested);
+    if (allowed) {
+        const { data: sede } = await supabase
+            .from('sedes')
+            .select('id, academia_id')
+            .eq('id', allowed)
+            .maybeSingle();
+        if (sede && Number(sede.academia_id) === Number(academiaId)) return Number(sede.id);
+        if (requested) return null;
+    }
+    const { data: first } = await supabase
+        .from('sedes')
+        .select('id')
+        .eq('academia_id', academiaId)
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+    return first?.id ? Number(first.id) : null;
+}
+
+async function saveSystemNews(title, academiaId, sedeId, body) {
+    const { data: existing } = await supabase
+        .from('news')
+        .select('id')
+        .eq('title', title)
+        .eq('academia_id', academiaId)
+        .eq('sede_id', sedeId)
+        .maybeSingle();
+    const payload = {
+        title,
+        body: JSON.stringify(body),
+        date: new Date().toISOString(),
+        sede_id: sedeId,
+        academia_id: academiaId,
+    };
+    if (existing) {
+        await supabase.from('news').update(payload).eq('id', existing.id);
+    } else {
+        await supabase.from('news').insert(payload);
+    }
+}
+
+async function publicAcademyId(req) {
+    const fromAuth = tenantId(req);
+    if (fromAuth) return fromAuth;
+    const academy = await academyByHostOrSlug(supabase, req);
+    return academy?.id ? Number(academy.id) : null;
+}
+
+const STUDENT_SOFT_CAP = 120;
+
+function sendPublicJson(req, res, body) {
+    if (!tenantId(req)) {
+        res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600');
+    } else {
+        res.set('Cache-Control', 'private, no-store');
+    }
+    return res.json(body);
+}
 
 
 const app = express();
@@ -155,37 +313,37 @@ const client = new MercadoPagoConfig({
     options: { timeout: 5000 }
 });
 
-// Helper to get Mercado Pago Config dynamically per Sede
-async function getMPClientForSede(sedeId) {
-    if (sedeId) {
-        try {
-            const { data: sedeRecord, error } = await supabase
-                .from('sedes')
-                .select('mp_access_token')
-                .eq('id', Number(sedeId))
-                .maybeSingle();
+// Token de la sede, solo si pertenece a la academia. El sandbox global no se usa para otra academia.
+async function getMPClientForSede(sedeId, academiaId) {
+    if (!sedeId) return null;
+    try {
+        let q = supabase.from('sedes').select('id, academia_id, mp_access_token').eq('id', Number(sedeId));
+        if (academiaId) q = q.eq('academia_id', Number(academiaId));
+        const { data: sedeRecord, error } = await q.maybeSingle();
+        if (error || !sedeRecord) return null;
+        if (academiaId && Number(sedeRecord.academia_id) !== Number(academiaId)) return null;
 
-            const sedeToken = sedeRecord?.mp_access_token || '';
-            if (!error && sedeToken && !sedeToken.startsWith('APP_USR')) {
-                return new MercadoPagoConfig({
-                    accessToken: sedeToken,
-                    options: { timeout: 5000 }
-                });
-            }
-        } catch (e) {
-            console.error(`[MP-CLIENT] Error fetching token for Sede ${sedeId}:`, e.message);
+        const sedeToken = sedeRecord.mp_access_token || '';
+        if (sedeToken && !sedeToken.startsWith('APP_USR')) {
+            return new MercadoPagoConfig({
+                accessToken: sedeToken,
+                options: { timeout: 5000 }
+            });
         }
-    }
-    const globalToken = process.env.VITE_MP_ACCESS_TOKEN || '';
-    if (Number(sedeId) === 1 && globalToken && !globalToken.startsWith('APP_USR')) {
-        return client;
+        const globalToken = process.env.VITE_MP_ACCESS_TOKEN || '';
+        if (Number(sedeRecord.academia_id) === 1 && globalToken && !globalToken.startsWith('APP_USR')) {
+            return client;
+        }
+    } catch (e) {
+        console.error(`[MP-CLIENT] Error fetching token for Sede ${sedeId}:`, e.message);
     }
     return null;
 }
 
-app.use(cors({ origin: true, allowedHeaders: ['Content-Type', 'X-Telemetry-Key'] }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cors({ origin: true, allowedHeaders: ['Content-Type', 'Authorization', 'X-Telemetry-Key', 'X-Internal-Key', 'X-Academy-Host'], exposedHeaders: ['X-Academy-Student-Count'] }));
+app.use(express.json({ limit: '400kb' }));
+app.use(express.urlencoded({ limit: '400kb', extended: true }));
+app.use(attachAuth);
 
 // Paths to "Database"
 const dbPath = path.join(__dirname, 'data');
@@ -204,25 +362,110 @@ const noticeFile = path.join(dbPath, 'global_notice.json');
 // Servir archivos estáticos de subidas
 app.use('/uploads', express.static(uploadsDir));
 
-// Endpoint de subida directo por Stream (sin multer)
+// Endpoint de subida: solo PDF chico. Fotos van a R2; videos a YouTube.
 app.post('/api/upload', (req, res) => {
     try {
-        const originalName = req.headers['x-filename'] || `upload_${Date.now()}`;
-        // Sanitizar el nombre de archivo o usar timestamp para evitar colisiones
-        const ext = path.extname(originalName) || '.mp4';
-        const sanitizedName = `file_${Date.now()}${ext}`;
+        const academiaId = tenantId(req);
+        if (!academiaId) return res.status(401).json({ error: 'Sesión requerida.' });
+        const originalName = String(req.headers['x-filename'] || '');
+        const ext = path.extname(originalName).toLowerCase();
+        const ctype = String(req.headers['content-type'] || '').toLowerCase();
+        const isImage = /^\.(jpe?g|png|webp|gif|heic|bmp)$/.test(ext) || ctype.startsWith('image/');
+        const isVideo = /^\.(mp4|mov|webm|mkv|m4v)$/.test(ext) || ctype.startsWith('video/');
+        if (isImage) {
+            return res.status(410).json({ error: 'Las fotos se suben comprimidas a almacenamiento, no al servidor.' });
+        }
+        if (isVideo) {
+            return res.status(410).json({ error: 'No subas video al servidor. Pega un enlace de YouTube.' });
+        }
+        if (ext !== '.pdf' && !ctype.includes('pdf')) {
+            return res.status(400).json({ error: 'Solo PDF de reglamento o material. Fotos por otro camino; videos en YouTube.' });
+        }
+        const MAX = 800 * 1024;
+        let received = 0;
+        let aborted = false;
+        const sanitizedName = `file_${Date.now()}.pdf`;
         const filePath = path.join(uploadsDir, sanitizedName);
-        
         const fileStream = fs.createWriteStream(filePath);
+        req.on('data', (chunk) => {
+            received += chunk.length;
+            if (received > MAX && !aborted) {
+                aborted = true;
+                req.destroy();
+                fileStream.destroy();
+                fs.unlink(filePath, () => {});
+                if (!res.headersSent) res.status(413).json({ error: 'El PDF no puede superar 800 KB. Usa un enlace.' });
+            }
+        });
         req.pipe(fileStream);
-
         fileStream.on('finish', () => {
+            if (aborted || res.headersSent) return;
             res.status(201).json({ url: `/uploads/${sanitizedName}` });
         });
-
         fileStream.on('error', (err) => {
-            res.status(500).json({ error: err.message });
+            if (!res.headersSent) res.status(500).json({ error: err.message });
         });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/media/sign', async (req, res) => {
+    try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        if (!r2Configured()) {
+            return res.status(503).json({ error: 'Falta configurar Cloudflare R2 (ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE).' });
+        }
+        const bytes = Number(req.body?.bytes);
+        const fileCap = maxFileBytes();
+        if (!Number.isFinite(bytes) || bytes <= 0) {
+            return res.status(400).json({ error: 'Falta el tamaño del archivo.' });
+        }
+        if (bytes > fileCap) {
+            return res.status(403).json({ error: `Cada foto puede pesar como máximo ${Math.floor(fileCap / 1024)} KB.` });
+        }
+        const contentType = String(req.body?.contentType || 'image/jpeg').toLowerCase();
+        if (!contentType.startsWith('image/')) {
+            return res.status(400).json({ error: 'Solo se aceptan imágenes.' });
+        }
+
+        const { data: academy } = await supabase.from('academias').select('max_images, max_storage_bytes').eq('id', academiaId).maybeSingle();
+        const { count } = await supabase.from('academy_media').select('id', { count: 'exact', head: true }).eq('academia_id', academiaId);
+        const cap = Number(academy?.max_images) || 80;
+        if ((count || 0) >= cap) {
+            return res.status(403).json({ error: `Tope de ${cap} fotos en esta academia.` });
+        }
+
+        const { data: mediaRows, error: mediaErr } = await supabase.from('academy_media').select('bytes, academia_id');
+        if (mediaErr) throw mediaErr;
+        const usedGlobal = (mediaRows || []).reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+        const usedAcademy = (mediaRows || [])
+            .filter((row) => Number(row.academia_id) === Number(academiaId))
+            .reduce((sum, row) => sum + Number(row.bytes || 0), 0);
+        const globalCap = globalMaxBytes();
+        const academyCap = Number(academy?.max_storage_bytes) || (cap * fileCap);
+        if (usedGlobal + bytes > globalCap) {
+            return res.status(403).json({
+                error: 'Tope global de almacenamiento alcanzado (8 GB de 10 GB gratis). No se sube para no generar cobro.',
+            });
+        }
+        if (usedAcademy + bytes > academyCap) {
+            return res.status(403).json({ error: 'Tope de almacenamiento de esta academia alcanzado.' });
+        }
+
+        const signed = await createPresignedPut({ academiaId, bytes, contentType });
+        const { error } = await supabase.from('academy_media').insert({
+            id: signed.id,
+            academia_id: academiaId,
+            cf_id: signed.key,
+            url: signed.url,
+            kind: req.body?.kind || 'image',
+            bytes,
+        });
+        if (error) throw error;
+        console.log('[R2] reserva', signed.key, bytes, 'B →', signed.url);
+        res.json(signed);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -246,8 +489,12 @@ const writeData = (file, data) => {
 // Admin Payments Lookup
 app.get('/api/admin/payments', async (req, res) => {
     try {
-        const { year = '2026', month = '02', sedeId } = req.query;
-        const mpClient = await getMPClientForSede(sedeId);
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { year = '2026', month = '02' } = req.query;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
+        const mpClient = await getMPClientForSede(sedeId, academiaId);
         if (!mpClient) {
             return res.status(400).json({ error: 'Mercado Pago no está configurado para esta sede.' });
         }
@@ -360,8 +607,10 @@ app.get('/api/admin/payments', async (req, res) => {
 // Videos
 app.get('/api/videos', async (req, res) => {
     try {
+        const academiaId = await publicAcademyId(req);
+        if (!academiaId) return res.json([]);
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
-        let query = supabase.from('videos').select('*');
+        let query = supabase.from('videos').select('*').eq('academia_id', academiaId);
         if (targetSedeId) {
             query = query.or(`sede_id.eq.${targetSedeId},sede_id.is.null`);
         }
@@ -392,6 +641,7 @@ app.post('/api/videos', async (req, res) => {
             discipline: req.body.discipline || 'Jiu Jitsu',
             belts,
             authorized_only: req.body.authorizedOnly !== false,
+            academia_id: tenantId(req),
             duration: req.body.duration || ''
         };
         const { error } = await supabase.from('videos').insert(newVideo);
@@ -453,8 +703,11 @@ app.delete('/api/videos/:id', async (req, res) => {
 // News
 app.get('/api/news', async (req, res) => {
     try {
+        const academiaId = await publicAcademyId(req);
+        if (!academiaId) return sendPublicJson(req, res, []);
         let query = supabase.from('news')
-            .select('*')
+            .select('id, title, body, img, date, label, link, sede_id')
+            .eq('academia_id', academiaId)
             .not('title', 'like', 'SYSTEM_%')
             .lt('id', 999900);
         if (req.query.sedeId) {
@@ -463,7 +716,7 @@ app.get('/api/news', async (req, res) => {
         query = query.order('id', { ascending: true });
         const { data, error } = await query;
         if (error) throw error;
-        res.json(data || []);
+        sendPublicJson(req, res, (data || []).map((row) => ({ ...row, img: slimMedia(row.img) })));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -471,6 +724,8 @@ app.get('/api/news', async (req, res) => {
 
 app.post('/api/news', async (req, res) => {
     try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
         const newsBody = Array.isArray(req.body) ? req.body : [req.body];
         if (DEMO_LOCK) {
@@ -482,6 +737,7 @@ app.post('/api/news', async (req, res) => {
         // Borrar noticias previas, protegiendo las configuraciones de sistema (SYSTEM_*) y las tarjetas de cumpleaños (ID >= 999900)
         let deleteQuery = supabase.from('news')
             .delete()
+            .eq('academia_id', academiaId)
             .neq('id', 999999)
             .not('title', 'like', 'SYSTEM_%')
             .lt('id', 999900);
@@ -495,7 +751,9 @@ app.post('/api/news', async (req, res) => {
 
         const newsWithSede = newsBody.map(item => ({
             ...item,
-            sede_id: targetSedeId
+            img: persistMedia(item.img) || '',
+            sede_id: targetSedeId,
+            academia_id: tenantId(req)
         }));
 
         const { error } = await supabase.from('news').insert(newsWithSede);
@@ -509,14 +767,16 @@ app.post('/api/news', async (req, res) => {
 // Gallery
 app.get('/api/gallery', async (req, res) => {
     try {
-        let query = supabase.from('gallery').select('*');
+        const academiaId = await publicAcademyId(req);
+        if (!academiaId) return sendPublicJson(req, res, []);
+        let query = supabase.from('gallery').select('id, img, size, sede_id').eq('academia_id', academiaId);
         if (req.query.sedeId) {
             query = query.or(`sede_id.eq.${req.query.sedeId},sede_id.is.null`);
         }
         query = query.order('id', { ascending: true });
         const { data, error } = await query;
         if (error) throw error;
-        res.json(data || []);
+        sendPublicJson(req, res, (data || []).map((row) => ({ ...row, img: slimMedia(row.img) })));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -524,6 +784,8 @@ app.get('/api/gallery', async (req, res) => {
 
 app.post('/api/gallery', async (req, res) => {
     try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
         const galleryBody = Array.isArray(req.body) ? req.body : [req.body];
         if (DEMO_LOCK) {
@@ -532,7 +794,7 @@ app.post('/api/gallery', async (req, res) => {
             const { data: existing } = await cur;
             if ((existing || []).length > galleryBody.length) return demoForbidden(res, 'website');
         }
-        let deleteQuery = supabase.from('gallery').delete().neq('id', 0);
+        let deleteQuery = supabase.from('gallery').delete().eq('academia_id', academiaId).neq('id', 0);
         if (targetSedeId) {
             deleteQuery = deleteQuery.eq('sede_id', targetSedeId);
         } else {
@@ -542,7 +804,9 @@ app.post('/api/gallery', async (req, res) => {
 
         const galleryWithSede = galleryBody.map(item => ({
             ...item,
-            sede_id: targetSedeId
+            img: persistMedia(item.img) || '',
+            sede_id: targetSedeId,
+            academia_id: tenantId(req)
         }));
 
         const { error } = await supabase.from('gallery').insert(galleryWithSede);
@@ -571,109 +835,17 @@ app.post('/api/hero-videos', (req, res) => {
 // Students with automatic background sync
 app.get('/api/students', async (req, res) => {
     try {
-        let query = supabase.from('students').select('*');
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        let query = supabase.from('students').select(STUDENT_LIST_COLS).eq('academia_id', academiaId);
         if (req.query.sedeId) {
             query = query.eq('sede_id', Number(req.query.sedeId));
         }
         const { data, error } = await query;
         if (error) throw error;
-
-        // Logic: if lastpaymentdate + 28 days < today, set as unpaid
-        const now = new Date();
-        const updatedData = [];
-        let anyStatusChanged = false;
-
-        for (const s of data) {
-            let currentStatus = s.ispaid;
-            if (s.lastpaymentdate) {
-                const pDate = new Date(s.lastpaymentdate);
-                pDate.setDate(pDate.getDate() + 28);
-                if (now > pDate && currentStatus === true) {
-                    currentStatus = false;
-                    await supabase.from('students').update({ ispaid: false }).eq('id', s.id);
-                    anyStatusChanged = true;
-                }
-            }
-            updatedData.push({ ...s, ispaid: currentStatus });
-        }
-
-        // Logic: Birthdays auto-broadcast (using Chile timezone)
-        const chileDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
-        const mm = String(chileDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(chileDate.getDate()).padStart(2, '0');
-        const searchDate = `-${mm}-${dd}`;
-        const birthdayStudents = updatedData.filter(s => s.birthdate && s.birthdate.includes(searchDate));
-        
-        const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
-        const noticeId = 999900 + (targetSedeId || 99);
-
-        if (birthdayStudents.length > 0) {
-            const names = birthdayStudents.map(s => s.name.split(' ')[0]).join(', ');
-            const subject = '🎂 ¡Felices Cumpleaños de Hoy!';
-            const message = `Hoy saludamos especialmente a: **${names}**. ¡Que tengan un excelente día de parte de su ${BRAND.academy}! `;
-            
-            // Verificamos si el aviso ya existe para hoy para evitar actualizaciones innecesarias
-            const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
-            if (!currentNotice || currentNotice.title !== subject || !currentNotice.date.includes(now.toISOString().split('T')[0])) {
-                await supabase.from('news').upsert({
-                    id: noticeId,
-                    title: subject,
-                    body: message,
-                    date: now.toISOString(),
-                    sede_id: targetSedeId
-                });
-            }
-        } else {
-            // Eliminar si no hay cumpleaños
-            const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
-            if (currentNotice && currentNotice.title.includes('Cumpleaños')) {
-                await supabase.from('news').delete().eq('id', noticeId);
-            }
-        }
-
-        const formatted = updatedData.map(s => {
-            const compEntry = Array.isArray(s.history) ? s.history.find(h => h && h._competition_info) : null;
-            const cleanHistory = stripMetaHistory(s.history);
-            const weightVal = (s.weight !== undefined && s.weight !== null) ? s.weight : (compEntry ? compEntry.weight : null);
-            const genderVal = s.gender ? s.gender : (compEntry ? compEntry.gender : null);
-            const ficha = pickFicha(s);
-            const progress = pickProgress(s);
-
-            return {
-                id: s.id,
-                name: s.name,
-                email: s.email,
-                password: s.password,
-                phone: s.phone,
-                belt: s.belt || 'WHITE',
-                classesAttended: s.classesattended,
-                classesToNextBelt: s.classestonextbelt,
-                lastPaymentMonth: s.lastpaymentmonth,
-                lastPaymentDate: s.lastpaymentdate,
-                isPaid: s.ispaid === true,
-                plan: s.plan,
-                monthlyFee: s.monthlyfee,
-                avatar: s.avatar,
-                birthDate: s.birthdate,
-                history: cleanHistory,
-                terms_accepted: s.terms_accepted === true || s.terms_accepted === 'true' || s.terms_accepted === 1,
-                scheduledClasses: Array.isArray(s.scheduledclasses) ? s.scheduledclasses : [],
-                joinDate: s.joindate || null,
-                lastGrade: s.lastgrade || null,
-                graduationDate: s.graduationdate || null,
-                evaluationDate: progress?.evaluationDate || null,
-                weight: weightVal,
-                gender: genderVal,
-                sedeId: s.sede_id || 1,
-                sede_id: s.sede_id || 1,
-                ...ficha,
-                progress: progress || undefined,
-            };
-        });
-
-        res.json(formatted);
-        // syncStudentsBackground desactivado - sobreescribía cambios manuales del admin
-
+        const { count: academyCount } = await supabase.from('students').select('id', { count: 'exact', head: true }).eq('academia_id', academiaId);
+        res.set('X-Academy-Student-Count', String(academyCount || 0));
+        res.json((data || []).map(formatStudent));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -749,16 +921,20 @@ async function syncStudentsBackground(students) {
 
 app.post('/api/students', async (req, res) => {
     try {
-        const { data: existingIds } = await supabase.from('students').select('id');
-        const takenIds = existingIds ? existingIds.map(e => parseInt(e.id)).filter(n => !isNaN(n)) : [];
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { count } = await supabase.from('students').select('id', { count: 'exact', head: true }).eq('academia_id', academiaId);
+        const { data: existingIds } = await supabase.from('students').select('id').eq('academia_id', academiaId);
+        const takenIds = existingIds ? existingIds.map(e => parseInt(String(e.id).split('_').pop(), 10)).filter(n => !isNaN(n)) : [];
         let newNum = 1;
         while (takenIds.includes(newNum)) {
             newNum++;
         }
-        const newId = newNum.toString();
+        const newId = `${academiaId}_${newNum}`;
 
         const newStudent = { 
             id: newId,
+            academia_id: academiaId,
             name: req.body.name,
             email: req.body.email || null,
             password: req.body.password || null,
@@ -769,14 +945,14 @@ app.post('/api/students', async (req, res) => {
             ispaid: req.body.isPaid === true,
             plan: req.body.plan ? req.body.plan.toString() : null,
             monthlyfee: Number(req.body.monthlyFee) || null,
-            avatar: req.body.avatar || null,
+            avatar: persistMedia(req.body.avatar) || '/mascota-dp.png',
             birthdate: req.body.birthDate || null,
             history: Array.isArray(req.body.history) ? req.body.history : [],
             scheduledclasses: Array.isArray(req.body.scheduledClasses) ? req.body.scheduledClasses : [],
             joindate: req.body.joinDate || null,
             lastgrade: req.body.lastGrade || null,
             graduationdate: req.body.graduationDate || null,
-            sede_id: req.body.sedeId ? Number(req.body.sedeId) : 1,
+            sede_id: req.body.sedeId ? Number(req.body.sedeId) : (await resolveSedeForAcademy(req, academiaId)),
             ficha: normalizeFicha(req.body.ficha || req.body)
         };
         const { error } = await supabase.from('students').insert(newStudent);
@@ -835,7 +1011,13 @@ app.post('/api/students', async (req, res) => {
             } catch(e) { console.error("❌ SMTP Setup Error:", e.message); }
         }
 
-        res.status(201).json({ ...req.body, id: newId });
+        res.status(201).json({
+            ...req.body,
+            id: newId,
+            capWarning: (count || 0) + 1 >= STUDENT_SOFT_CAP
+                ? { count: (count || 0) + 1, softCap: STUDENT_SOFT_CAP }
+                : null,
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -855,7 +1037,7 @@ app.put('/api/students/:id', async (req, res) => {
         if (req.body.plan !== undefined) updateData.plan = req.body.plan ? req.body.plan.toString() : null;
         if (req.body.monthlyFee !== undefined) updateData.monthlyfee = Number(req.body.monthlyFee);
         if (req.body.birthDate !== undefined) updateData.birthdate = req.body.birthDate;
-        if (req.body.avatar !== undefined) updateData.avatar = req.body.avatar;
+        if (req.body.avatar !== undefined) updateData.avatar = persistMedia(req.body.avatar);
         if (req.body.lastPaymentDate !== undefined) updateData.lastpaymentdate = req.body.lastPaymentDate;
         if (req.body.lastPaymentMonth !== undefined) updateData.lastpaymentmonth = req.body.lastPaymentMonth;
         if (req.body.scheduledClasses !== undefined) updateData.scheduledclasses = req.body.scheduledClasses;
@@ -908,7 +1090,11 @@ app.put('/api/students/:id', async (req, res) => {
         updateData.history = currentHist;
 
         console.log(`PUT /api/students/${req.params.id}`, JSON.stringify(updateData));
-        let { error } = await supabase.from('students').update(updateData).eq('id', req.params.id);
+        const academiaId = tenantId(req);
+        if (!academiaId) {
+            return res.status(401).json({ error: 'Sesión de academia requerida.' });
+        }
+        let { error } = await supabase.from('students').update(updateData).eq('id', req.params.id).eq('academia_id', academiaId);
         if (error && (error.message.includes('weight') || error.message.includes('gender') || error.message.includes('ficha') || error.message.includes('progress') || error.code === 'PGRST204')) {
             console.warn('Supabase update warning (stripping optional columns if not yet in DB schema):', error.message);
             const fallbackData = { ...updateData };
@@ -916,7 +1102,7 @@ app.put('/api/students/:id', async (req, res) => {
             delete fallbackData.gender;
             delete fallbackData.ficha;
             delete fallbackData.progress;
-            const retryRes = await supabase.from('students').update(fallbackData).eq('id', req.params.id);
+            const retryRes = await supabase.from('students').update(fallbackData).eq('id', req.params.id).eq('academia_id', academiaId);
             error = retryRes.error;
         }
         if (error) {
@@ -941,7 +1127,9 @@ app.put('/api/students/:id', async (req, res) => {
 app.delete('/api/students/:id', async (req, res) => {
     if (DEMO_LOCK) return demoForbidden(res, 'students');
     try {
-        const { error } = await supabase.from('students').delete().eq('id', req.params.id);
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { error } = await supabase.from('students').delete().eq('id', req.params.id).eq('academia_id', academiaId);
         if (error) throw error;
         res.json({ success: true, message: 'Alumno eliminado correctamente' });
     } catch (error) {
@@ -962,10 +1150,12 @@ app.post('/api/students/:id/accept-terms', async (req, res) => {
 // --- SYNC PAYMENTS FROM MERCADO PAGO ---
 app.post('/api/students/:id/sync-payments', async (req, res) => {
     try {
-        const { data: student, error: selectError } = await supabase.from('students').select('*').eq('id', req.params.id).single();
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { data: student, error: selectError } = await supabase.from('students').select(STUDENT_LIST_COLS).eq('id', req.params.id).eq('academia_id', academiaId).single();
         if (selectError || !student) return res.status(404).json({ error: 'Alumno no encontrado' });
 
-        const mpClient = await getMPClientForSede(student.sede_id);
+        const mpClient = await getMPClientForSede(student.sede_id, academiaId);
         if (!mpClient) return res.status(400).json({ error: 'Mercado Pago no está configurado para la sede de este alumno.' });
         const mpPayment = new Payment(mpClient);
         const sixMonthsAgo = new Date();
@@ -1066,6 +1256,8 @@ function calculateSurcharge(baseAmount) {
 
 app.post('/api/checkout', async (req, res) => {
     try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
         const { student, students, amount, withSurcharge } = req.body;
         const isGroup = Array.isArray(students) && students.length > 0;
 
@@ -1077,10 +1269,19 @@ app.post('/api/checkout', async (req, res) => {
             : (student ? [student.id] : []);
 
         if (idsToCheck.length > 0) {
+            const { data: owned } = await supabase
+                .from('students')
+                .select('id')
+                .in('id', idsToCheck)
+                .eq('academia_id', academiaId);
+            if (!owned || owned.length !== idsToCheck.length) {
+                return res.status(403).json({ error: 'Alumno no pertenece a esta academia.' });
+            }
             const { data: studentRecords } = await supabase
                 .from('students')
                 .select('id, name, ispaid, lastpaymentmonth')
                 .in('id', idsToCheck)
+                .eq('academia_id', academiaId)
                 .eq('ispaid', true);
 
             // Bloquear si lastpaymentmonth >= mes actual (cubre este mes Y pagos adelantados)
@@ -1124,13 +1325,17 @@ app.post('/api/checkout', async (req, res) => {
 
         const totalCharged = items.reduce((acc, i) => acc + i.unit_price, 0);
         
-        // Determinar sede para checkout
-        const targetSedeId = isGroup ? (students[0].sede_id || students[0].sedeId) : (student.sede_id || student.sedeId);
-        const mpClient = await getMPClientForSede(targetSedeId);
+        const requestedSede = isGroup ? (students[0].sede_id || students[0].sedeId) : (student.sede_id || student.sedeId);
+        const { data: sedeRow } = requestedSede
+            ? await supabase.from('sedes').select('id, academia_id').eq('id', Number(requestedSede)).eq('academia_id', academiaId).maybeSingle()
+            : { data: null };
+        const targetSedeId = sedeRow?.id || await resolveSedeForAcademy(req, academiaId);
+        if (!targetSedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
+        const mpClient = await getMPClientForSede(targetSedeId, academiaId);
         if (!mpClient) {
             return res.status(400).json({ success: false, error: 'Mercado Pago no está configurado para tu sede aún. Por favor contacta al administrador.' });
         }
-        console.log(`[CHECKOUT] Sede: ${targetSedeId}, Amount: $${amount}, WithSurcharge: ${!!withSurcharge}, Total charged: $${totalCharged}`);
+        console.log(`[CHECKOUT] Academia: ${academiaId} Sede: ${targetSedeId}, Amount: $${amount}, WithSurcharge: ${!!withSurcharge}, Total charged: $${totalCharged}`);
 
         const preference = new Preference(mpClient);
         const webhookUrl = (process.env.BACKEND_URL || `http://localhost:${PORT}`) + `/api/webhooks?sede_id=${targetSedeId || ''}`;
@@ -1141,6 +1346,7 @@ app.post('/api/checkout', async (req, res) => {
                     email: isGroup ? students[0].email : student.email
                 },
                 external_reference: isGroup ? students.map(s => s.id).join(',') : student.id.toString(),
+                metadata: { academia_id: academiaId, sede_id: targetSedeId },
                 back_urls: {
                     success: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=success',
                     failure: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=failure',
@@ -1161,16 +1367,18 @@ app.post('/api/checkout', async (req, res) => {
 // Enviar recordatorio de pago individual
 app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
     try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
         if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
             return res.status(400).json({ error: 'Configuración SMTP incompleta' });
         }
         
-        const { data: student, error: selectError } = await supabase.from('students').select('*').eq('id', req.params.id).single();
+        const { data: student, error: selectError } = await supabase.from('students').select(STUDENT_LIST_COLS).eq('id', req.params.id).eq('academia_id', academiaId).single();
         if (selectError || !student) return res.status(404).json({ error: 'Alumno no encontrado' });
         if (!student.email) return res.status(400).json({ error: 'Alumno sin correo configurado' });
         if (!student.monthlyfee) return res.status(400).json({ error: 'Alumno no tiene mensualidad configurada' });
 
-        const mpClient = await getMPClientForSede(student.sede_id);
+        const mpClient = await getMPClientForSede(student.sede_id, academiaId);
         if (!mpClient) return res.status(400).json({ error: 'Mercado Pago no está configurado para la sede de este alumno.' });
         const preference = new Preference(mpClient);
         const webhookUrl = (process.env.BACKEND_URL || `http://localhost:${PORT}`) + `/api/webhooks?sede_id=${student.sede_id || ''}`;
@@ -1185,6 +1393,8 @@ app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
                     }
                 ],
                 payer: { email: student.email },
+                external_reference: String(student.id),
+                metadata: { academia_id: academiaId, sede_id: student.sede_id },
                 back_urls: {
                     success: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=success',
                     failure: (process.env.FRONTEND_URL || 'http://localhost:5173') + '?payment=failure',
@@ -1234,7 +1444,7 @@ app.post('/api/students/:id/send-payment-reminder', async (req, res) => {
 app.post('/api/admin/generate-passwords', async (req, res) => {
     try {
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
-        let query = supabase.from('students').select('*').is('password', null);
+        let query = supabase.from('students').select('id, password').is('password', null);
         if (targetSedeId) {
             query = query.eq('sede_id', targetSedeId);
         }
@@ -1273,7 +1483,7 @@ app.post('/api/admin/send-credentials', async (req, res) => {
         });
 
         // Asegúrate de que los estudiantes vivan con password disponible
-        let query = supabase.from('students').select('*');
+        let query = supabase.from('students').select('id, name, email, password, sede_id');
         if (targetSedeId) {
             query = query.eq('sede_id', targetSedeId);
         }
@@ -1495,11 +1705,21 @@ app.post('/api/webhooks', async (req, res) => {
     }
 
     try {
-        const sedeId = req.query.sede_id;
-        const mpClient = await getMPClientForSede(sedeId);
+        const sedeId = req.query.sede_id ? Number(req.query.sede_id) : null;
+        if (!sedeId) {
+            console.error('[WEBHOOK ERROR] Falta sede_id en la notificación.');
+            return;
+        }
+        const { data: sede } = await supabase.from('sedes').select('id, academia_id').eq('id', sedeId).maybeSingle();
+        if (!sede?.academia_id) {
+            console.error(`[WEBHOOK ERROR] Sede ${sedeId} no existe.`);
+            return;
+        }
+        const academiaId = Number(sede.academia_id);
+        const mpClient = await getMPClientForSede(sedeId, academiaId);
         if (!mpClient) {
             console.error(`[WEBHOOK ERROR] Sede ${sedeId} does not have MP configured.`);
-            return res.status(400).json({ error: 'Sede sin Mercado Pago configurado.' });
+            return;
         }
         const mpPayment = new Payment(mpClient);
         const payDetails = await mpPayment.get({ id: paymentId });
@@ -1520,29 +1740,25 @@ app.post('/api/webhooks', async (req, res) => {
             }
 
             if (studentIds.length === 0) {
-                const desc = (payDetails.description || '').toLowerCase();
-                const pEmail = (payerEmail || '').toLowerCase();
-                const { data: allStudents } = await supabase.from('students').select('id, email, name');
-                if (allStudents) {
-                    const matchedStudent = allStudents.find(s => {
-                        if (!s.email) return false;
-                        const sEmail = s.email.toLowerCase();
-                        return sEmail === pEmail || desc.includes(sEmail);
-                    });
-                    if (matchedStudent) {
-                        studentIds.push(matchedStudent.id);
-                    } else {
-                        const matchedByName = allStudents.find(s => s.name && desc.includes(s.name.toLowerCase()));
-                        if (matchedByName) studentIds.push(matchedByName.id);
-                    }
-                }
+                console.warn(`Webhook ${paymentId}: sin external_reference. No se busca por email global.`);
+            }
+
+            const metaAcademy = Number(payDetails.metadata?.academia_id || 0);
+            const metaSede = Number(payDetails.metadata?.sede_id || 0);
+            if (metaAcademy && metaAcademy !== academiaId) {
+                console.warn(`Webhook ${paymentId}: metadata academia ${metaAcademy} != sede academia ${academiaId}`);
+                return;
+            }
+            if (metaSede && metaSede !== sedeId) {
+                console.warn(`Webhook ${paymentId}: metadata sede ${metaSede} != query sede ${sedeId}`);
+                return;
             }
 
             if (studentIds.length > 0) {
                 const historyAmount = studentIds.length > 1 ? (amount / studentIds.length) : amount;
                 
                 for (const sid of studentIds) {
-                    const { data: student } = await supabase.from('students').select('*').eq('id', sid.trim()).maybeSingle();
+                    const { data: student } = await supabase.from('students').select(STUDENT_LIST_COLS).eq('id', sid.trim()).eq('academia_id', academiaId).maybeSingle();
                     if (student) {
                         const history = Array.isArray(student.history) ? student.history : [];
                         if (!history.some(h => h.transaction_id === paymentId.toString())) {
@@ -1559,7 +1775,7 @@ app.post('/api/webhooks', async (req, res) => {
                                 ispaid: true,
                                 lastpaymentdate: payDate,
                                 lastpaymentmonth: payDate.substring(0, 7)
-                            }).eq('id', student.id);
+                            }).eq('id', student.id).eq('academia_id', academiaId);
 
                             console.log(`Student ${student.name} updated successfully via Webhook.`);
                         } else {
@@ -1583,7 +1799,7 @@ app.post('/api/webhooks', async (req, res) => {
 app.post('/api/admin/check-birthdays', async (req, res) => {
     try {
         const targetSedeId = req.query.sedeId ? Number(req.query.sedeId) : null;
-        let query = supabase.from('students').select('*');
+        let query = supabase.from('students').select('id, name, birthdate, sede_id');
         if (targetSedeId) {
             query = query.eq('sede_id', targetSedeId);
         }
@@ -1739,7 +1955,7 @@ async function syncTransferPaymentsForSede(sedeId) {
         // Traer alumnos de esta sede
         const { data: students, error: studErr } = await supabase
             .from('students')
-            .select('*')
+            .select('id, email, name, history, ispaid, lastpaymentdate, lastpaymentmonth')
             .eq('sede_id', Number(sedeId));
         if (studErr) throw studErr;
 
@@ -1756,7 +1972,8 @@ async function syncTransferPaymentsForSede(sedeId) {
         });
 
         // Get MP payments
-        const mpClient = await getMPClientForSede(sedeId);
+        const { data: sedeMeta } = await supabase.from('sedes').select('id, academia_id').eq('id', Number(sedeId)).maybeSingle();
+        const mpClient = await getMPClientForSede(sedeId, sedeMeta?.academia_id);
         if (!mpClient) {
             console.log(`[SYNC-SEDE-${sedeId}] Saltando sincronización: Mercado Pago no configurado para esta sede.`);
             return { synced: 0, details: [] };
@@ -1916,7 +2133,7 @@ app.post('/api/transfer-intent', async (req, res) => {
 async function repairInconsistentProfiles() {
     console.log('[REPAIR] Iniciando escaneo de perfiles inconsistentes...');
     try {
-        const { data: students, error } = await supabase.from('students').select('*');
+        const { data: students, error } = await supabase.from('students').select('id, name, ispaid, history');
         if (error) throw error;
 
         const now = DateTime.now().setZone('America/Santiago');
@@ -2022,29 +2239,17 @@ app.post('/api/admin/sync-transfers', async (req, res) => {
     }
 });
 
-// CRON: Auto-sync transfers every 10 minutes + Repair
-cron.schedule('*/10 * * * *', async () => {
-    console.log('[CRON] Auto-sync y Repair (10 min)...');
-    await syncTransferPayments();
-    await repairInconsistentProfiles();
-}, {
-    scheduled: true,
-    timezone: "America/Santiago"
-});
-
-// Automatización diaria de cumpleaños y escaneo profundo (09:00 Hora de Chile)
+// CRON diario (no cada 10 min: eso leía alumnos todo el día y infló el egress Free)
 cron.schedule('0 9 * * *', async () => {
     console.log('[CRON] Iniciando verificación diaria (09:00 Chile)...');
     
-    // 1. Repair Inconsistent Profiles
     await repairInconsistentProfiles();
-
-    // 2. Expire old payments (28 Days Rule)
     await expireOldPayments();
+    await syncTransferPayments();
 
     // 3. Birthdays
     try {
-        const { data: students, error } = await supabase.from('students').select('*');
+        const { data: students, error } = await supabase.from('students').select('id, name, birthdate, sede_id, academia_id');
         if (error) throw error;
 
         const chileTime = DateTime.now().setZone('America/Santiago');
@@ -2052,10 +2257,11 @@ cron.schedule('0 9 * * *', async () => {
         const dd = String(chileTime.day).padStart(2, '0');
         const searchDate = `-${mm}-${dd}`;
 
-        const { data: sedes } = await supabase.from('sedes').select('id');
-        const sedeIds = sedes ? sedes.map(s => s.id) : [1];
+        const { data: sedes } = await supabase.from('sedes').select('id, academia_id');
+        const sedeList = sedes && sedes.length ? sedes : [];
 
-        for (const sId of sedeIds) {
+        for (const sede of sedeList) {
+            const sId = sede.id;
             const sedeStudents = students.filter(s => s.sede_id === sId);
             const birthdayStudents = sedeStudents.filter(s => s.birthdate && s.birthdate.includes(searchDate));
             const noticeId = 999900 + sId;
@@ -2070,13 +2276,14 @@ cron.schedule('0 9 * * *', async () => {
                     title: subject,
                     body: message,
                     date: chileTime.toISO(),
-                    sede_id: sId
+                    sede_id: sId,
+                    academia_id: sede.academia_id
                 });
                 console.log(`[CRON] Sede ${sId} - Aviso de cumpleaños publicado: ${names}`);
             } else {
-                const { data: currentNotice } = await supabase.from('news').select('*').eq('id', noticeId).maybeSingle();
+                const { data: currentNotice } = await supabase.from('news').select('id, title').eq('id', noticeId).eq('academia_id', sede.academia_id).maybeSingle();
                 if (currentNotice && currentNotice.title.includes('Cumpleaños')) {
-                    await supabase.from('news').delete().eq('id', noticeId);
+                    await supabase.from('news').delete().eq('id', noticeId).eq('academia_id', sede.academia_id);
                 }
             }
         }
@@ -2096,25 +2303,21 @@ const DEFAULT_FEES = {
 
 app.get('/api/fees', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
         const { data, error } = await supabase
             .from('news')
             .select('*')
             .eq('title', 'SYSTEM_FEES')
+            .eq('academia_id', academiaId)
             .eq('sede_id', sedeId)
             .maybeSingle();
 
+        if (error) throw error;
         if (data && data.body) {
             const stored = JSON.parse(data.body);
-            return res.json({
-                adults: { ...DEFAULT_FEES.adults, ...stored.adults },
-                kids: { ...DEFAULT_FEES.kids, ...stored.kids }
-            });
-        }
-        // Fallback global check
-        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999998).maybeSingle();
-        if (globalData && globalData.body) {
-            const stored = JSON.parse(globalData.body);
             return res.json({
                 adults: { ...DEFAULT_FEES.adults, ...stored.adults },
                 kids: { ...DEFAULT_FEES.kids, ...stored.kids }
@@ -2128,26 +2331,11 @@ app.get('/api/fees', async (req, res) => {
 
 app.post('/api/fees', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
-        const { data: existing } = await supabase
-            .from('news')
-            .select('id')
-            .eq('title', 'SYSTEM_FEES')
-            .eq('sede_id', sedeId)
-            .maybeSingle();
-
-        const payload = {
-            title: 'SYSTEM_FEES',
-            body: JSON.stringify(req.body),
-            date: new Date().toISOString(),
-            sede_id: sedeId
-        };
-
-        if (existing) {
-            await supabase.from('news').update(payload).eq('id', existing.id);
-        } else {
-            await supabase.from('news').insert(payload);
-        }
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
+        await saveSystemNews('SYSTEM_FEES', academiaId, sedeId, req.body);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -2156,21 +2344,21 @@ app.post('/api/fees', async (req, res) => {
 
 app.get('/api/automation', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
         const { data, error } = await supabase
             .from('news')
             .select('*')
             .eq('title', 'SYSTEM_AUTOMATION')
+            .eq('academia_id', academiaId)
             .eq('sede_id', sedeId)
             .maybeSingle();
 
+        if (error) throw error;
         if (data && data.body) {
             return res.json(JSON.parse(data.body));
-        }
-        // Fallback global check
-        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999997).maybeSingle();
-        if (globalData && globalData.body) {
-            return res.json(JSON.parse(globalData.body));
         }
         res.json({ reminderDay: 5, whatsappTemplate: "Hola {nombre}...", emailTemplate: "Hola {nombre}..." });
     } catch (e) {
@@ -2180,26 +2368,11 @@ app.get('/api/automation', async (req, res) => {
 
 app.post('/api/automation', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
-        const { data: existing } = await supabase
-            .from('news')
-            .select('id')
-            .eq('title', 'SYSTEM_AUTOMATION')
-            .eq('sede_id', sedeId)
-            .maybeSingle();
-
-        const payload = {
-            title: 'SYSTEM_AUTOMATION',
-            body: JSON.stringify(req.body),
-            date: new Date().toISOString(),
-            sede_id: sedeId
-        };
-
-        if (existing) {
-            await supabase.from('news').update(payload).eq('id', existing.id);
-        } else {
-            await supabase.from('news').insert(payload);
-        }
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
+        await saveSystemNews('SYSTEM_AUTOMATION', academiaId, sedeId, req.body);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -2208,21 +2381,21 @@ app.post('/api/automation', async (req, res) => {
 
 app.get('/api/discount-categories', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
         const { data, error } = await supabase
             .from('news')
             .select('*')
             .eq('title', 'SYSTEM_DISCOUNT_CATEGORIES')
+            .eq('academia_id', academiaId)
             .eq('sede_id', sedeId)
             .maybeSingle();
 
+        if (error) throw error;
         if (data && data.body) {
             return res.json(JSON.parse(data.body));
-        }
-        // Fallback global check
-        const { data: globalData } = await supabase.from('news').select('*').eq('id', 999996).maybeSingle();
-        if (globalData && globalData.body) {
-            return res.json(JSON.parse(globalData.body));
         }
         res.json(['Convenio Bomberos', 'Profesor', 'Becados']);
     } catch (e) {
@@ -2232,26 +2405,11 @@ app.get('/api/discount-categories', async (req, res) => {
 
 app.post('/api/discount-categories', async (req, res) => {
     try {
-        const sedeId = req.query.sedeId ? Number(req.query.sedeId) : 1;
-        const { data: existing } = await supabase
-            .from('news')
-            .select('id')
-            .eq('title', 'SYSTEM_DISCOUNT_CATEGORIES')
-            .eq('sede_id', sedeId)
-            .maybeSingle();
-
-        const payload = {
-            title: 'SYSTEM_DISCOUNT_CATEGORIES',
-            body: JSON.stringify(req.body),
-            date: new Date().toISOString(),
-            sede_id: sedeId
-        };
-
-        if (existing) {
-            await supabase.from('news').update(payload).eq('id', existing.id);
-        } else {
-            await supabase.from('news').insert(payload);
-        }
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const sedeId = await resolveSedeForAcademy(req, academiaId);
+        if (!sedeId) return res.status(403).json({ error: 'Sede no pertenece a esta academia.' });
+        await saveSystemNews('SYSTEM_DISCOUNT_CATEGORIES', academiaId, sedeId, req.body);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -2265,7 +2423,9 @@ app.post('/api/discount-categories', async (req, res) => {
 // Obtener todas las sedes
 app.get('/api/sedes', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('sedes').select('*').order('name', { ascending: true });
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { data, error } = await supabase.from('sedes').select('id, name, address, image, status, created_at').eq('academia_id', academiaId).order('name', { ascending: true });
         if (error) throw error;
         res.json(data || []);
     } catch (error) {
@@ -2312,12 +2472,14 @@ function scheduleHasOverlap(slots) {
 
 app.get('/api/schedule', async (req, res) => {
     try {
-        let query = supabase.from('class_slots').select('*').order('sort_order', { ascending: true });
+        const academiaId = await publicAcademyId(req);
+        if (!academiaId) return sendPublicJson(req, res, []);
+        let query = supabase.from('class_slots').select('*').eq('academia_id', academiaId).order('sort_order', { ascending: true });
         if (req.query.sedeId) query = query.eq('sede_id', Number(req.query.sedeId));
         const { data, error } = await query;
         if (error) throw error;
         const mapped = (data || []).map(mapClassSlot);
-        res.json(mapped);
+        sendPublicJson(req, res, mapped);
     } catch (error) {
         console.error('GET schedule error:', error.message);
         res.json([]);
@@ -2326,6 +2488,8 @@ app.get('/api/schedule', async (req, res) => {
 
 app.put('/api/schedule', async (req, res) => {
     try {
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
         const slots = Array.isArray(req.body.slots) ? req.body.slots : [];
         if (scheduleHasOverlap(slots)) {
             return res.status(400).json({ error: 'Hay clases que se superponen en la misma sede o con el mismo profesor.' });
@@ -2341,7 +2505,7 @@ app.put('/api/schedule', async (req, res) => {
                 return demoForbidden(res, 'classes');
             }
         }
-        let del = supabase.from('class_slots').delete();
+        let del = supabase.from('class_slots').delete().eq('academia_id', academiaId);
         del = sedeId ? del.eq('sede_id', sedeId) : del.gte('sort_order', 0);
         const { error: delErr } = await del;
         if (delErr) throw delErr;
@@ -2357,6 +2521,7 @@ app.put('/api/schedule', async (req, res) => {
                 end_time: s.endTime || '20:30',
                 teacher: s.teacher || '',
                 sede_id: s.sedeId ? Number(s.sedeId) : (sedeId || 1),
+                academia_id: tenantId(req),
                 audience: s.audience || 'ADULTS',
                 sort_order: i + 1,
                 capacity: s.capacity === undefined || s.capacity === null || s.capacity === '' ? null : Number(s.capacity),
@@ -2371,7 +2536,7 @@ app.put('/api/schedule', async (req, res) => {
             }
             if (insErr) throw insErr;
         }
-        const { data } = await supabase.from('class_slots').select('*').order('sort_order', { ascending: true });
+        const { data } = await supabase.from('class_slots').select('*').eq('academia_id', academiaId).order('sort_order', { ascending: true });
         res.json((data || []).map(mapClassSlot));
     } catch (error) {
         console.error('PUT schedule error:', error.message);
@@ -2587,9 +2752,98 @@ app.post('/api/attendance', async (req, res) => {
 });
 
 // Endpoint seguro de Autenticación
+app.get('/api/public/academy', async (req, res) => {
+    try {
+        const academy = await academyByHostOrSlug(supabase, req, req.query.slug);
+        if (!academy) return sendPublicJson(req, res, { marketing: isDpMarketingHost(requestHost(req)) });
+        sendPublicJson(req, res, {
+            id: academy.id,
+            slug: academy.slug,
+            name: academy.name,
+            logoUrl: academy.logo_url,
+            color: academy.color,
+            customDomain: academy.custom_domain,
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/internal/academias', async (req, res) => {
+    if (!internalKeyOk(req)) return res.status(401).json({ error: 'No autorizado.' });
+    try {
+        const { name, slug, custom_domain, admin_email, admin_password, color, logo_url } = req.body || {};
+        if (!name || !slug || !admin_email || !admin_password) {
+            return res.status(400).json({ error: 'name, slug, admin_email y admin_password son obligatorios.' });
+        }
+        const cleanSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '');
+        const { data: academy, error: aErr } = await supabase.from('academias').insert({
+            name,
+            slug: cleanSlug,
+            custom_domain: custom_domain ? String(custom_domain).toLowerCase().replace(/^www\./, '') : null,
+            color: color || '#006970',
+            logo_url: persistMedia(logo_url) || '',
+            status: 'active',
+            max_students: 120,
+            max_news: 40,
+            max_gallery: 30,
+            max_images: 80,
+        }).select('*').single();
+        if (aErr) throw aErr;
+        const { data: sedeRow, error: sErr } = await supabase.from('sedes').insert({
+            name: 'Sede principal',
+            address: '',
+            status: 'Activa',
+            academia_id: academy.id,
+        }).select('id').single();
+        if (sErr) throw sErr;
+        const adminEmail = String(admin_email).trim().toLowerCase();
+        const { error: adErr } = await supabase.from('admins').insert({
+            email: adminEmail,
+            password_hash: String(admin_password),
+            role: 'superadmin',
+            academia_id: academy.id,
+        });
+        if (adErr) throw adErr;
+        const { error: stErr } = await supabase.from('students').insert({
+            id: `${academy.id}_1`,
+            academia_id: academy.id,
+            name,
+            email: adminEmail,
+            password: 'alumno26',
+            phone: '+56900000000',
+            belt: 'WHITE',
+            classesattended: 0,
+            classestonextbelt: 40,
+            ispaid: true,
+            plan: 'Ilimitado',
+            monthlyfee: 45000,
+            avatar: persistMedia(logo_url) || '/mascota-dp.png',
+            birthdate: '1990-01-15',
+            history: [],
+            scheduledclasses: [],
+            joindate: new Date().toISOString().slice(0, 10),
+            sede_id: sedeRow.id,
+            terms_accepted: true,
+            weight: 75,
+            gender: 'MALE',
+            ficha: normalizeFicha({
+                tutorName: 'Tutor de ejemplo',
+                tutorPhone: '+56911111111',
+                emergencyName: 'Contacto de emergencia',
+                emergencyPhone: '+56922222222',
+            }),
+        });
+        if (stErr) throw stErr;
+        res.json({ success: true, academy });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/auth/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, slug } = req.body;
         if (!email || !password) {
             return res.status(400).json({ success: false, error: 'Email y contraseña requeridos' });
         }
@@ -2597,60 +2851,81 @@ app.post('/api/auth/login', async (req, res) => {
         const lowerEmail = email.trim().toLowerCase();
         const trimmedPass = password.trim();
 
-        // 1. Intentar validar contra la tabla de admins en la base de datos
-        let adminFoundButWrongPass = false;
-        try {
-            const { data: admin, error } = await supabase
-                .from('admins')
-                .select('*')
-                .eq('email', lowerEmail)
-                .maybeSingle();
-
-            if (!error && admin) {
-                if (admin.password_hash === trimmedPass) {
-                    return res.json({
-                        success: true,
-                        role: admin.role, // 'superadmin' o 'admin_sede'
-                        sedeId: admin.sede_id,
-                        email: admin.email
-                    });
-                } else {
-                    // No retornamos 401 inmediatamente en caso de que sea un correo compartido
-                    // o que el usuario también esté en la tabla de alumnos y esté intentando ingresar como alumno.
-                    adminFoundButWrongPass = true;
-                }
-            }
-        } catch (dbErr) {
-            console.error("Admins table check failed or not created yet:", dbErr.message);
+        const staffEmail = (process.env.DP_STAFF_EMAIL || '').trim().toLowerCase();
+        const staffPass = process.env.DP_STAFF_PASSWORD || '';
+        if (staffEmail && staffPass && lowerEmail === staffEmail && trimmedPass === staffPass) {
+            const token = signToken({ role: 'dp_staff', email: lowerEmail });
+            return res.json({ success: true, role: 'dp_staff', email: lowerEmail, token });
         }
 
-        // 2. Fallback: Logins hardcodeados para superadmins (Compatibilidad)
-        const adminEmails = ['contacto@dpsistemas.cl'];
-        if (trimmedPass === 'admin123' && adminEmails.includes(lowerEmail)) {
-            return res.json({
-                success: true,
-                role: 'superadmin',
-                sedeId: null,
-                email: lowerEmail
+        const academyHit = await academyForLogin(supabase, req, { slug });
+        const academy = academyHit.academy;
+        if (!academy) {
+            return res.status(401).json({
+                success: false,
+                error: isDpMarketingHost(requestHost(req))
+                    ? 'La academia demo no está disponible.'
+                    : 'No encontramos la academia de este dominio.',
             });
         }
 
-        // 3. Intentar buscar en la tabla de alumnos (students)
+        let adminFoundButWrongPass = false;
+        const { data: admin, error } = await supabase
+            .from('admins')
+            .select('*')
+            .eq('academia_id', academy.id)
+            .eq('email', lowerEmail)
+            .maybeSingle();
+
+        if (!error && admin) {
+            if (admin.password_hash === trimmedPass) {
+                const blocked = demoAccessBlocked(admin);
+                if (blocked) return res.status(401).json({ success: false, error: blocked });
+                const token = signToken({
+                    role: admin.role || 'superadmin',
+                    email: admin.email,
+                    academia_id: academy.id,
+                    sede_id: admin.sede_id || null,
+                }, sessionHours(admin));
+                return res.json({
+                    success: true,
+                    role: admin.role,
+                    sedeId: admin.sede_id,
+                    email: admin.email,
+                    academiaId: academy.id,
+                    token,
+                });
+            }
+            adminFoundButWrongPass = true;
+        }
+
         const { data: student, error: studentErr } = await supabase
             .from('students')
-            .select('*')
+            .select(STUDENT_LIST_COLS)
+            .eq('academia_id', academy.id)
             .ilike('email', lowerEmail)
             .maybeSingle();
 
         if (!studentErr && student) {
             if (student.password && student.password.trim().toLowerCase() === trimmedPass.toLowerCase()) {
+                const blocked = demoAccessBlocked(student);
+                if (blocked) return res.status(401).json({ success: false, error: blocked });
                 const ficha = pickFicha(student);
                 const compEntry = Array.isArray(student.history) ? student.history.find(h => h && h._competition_info) : null;
                 const weightVal = (student.weight !== undefined && student.weight !== null) ? student.weight : (compEntry ? compEntry.weight : null);
                 const genderVal = student.gender ? student.gender : (compEntry ? compEntry.gender : null);
+                const token = signToken({
+                    role: 'student',
+                    email: student.email,
+                    academia_id: academy.id,
+                    sede_id: student.sede_id || null,
+                    user_id: student.id,
+                }, sessionHours(student));
                 return res.json({
                     success: true,
                     role: 'student',
+                    token,
+                    academiaId: academy.id,
                     student: {
                         id: student.id,
                         name: student.name,
@@ -2661,7 +2936,7 @@ app.post('/api/auth/login', async (req, res) => {
                         isPaid: student.ispaid === true,
                         plan: student.plan,
                         monthlyFee: student.monthlyfee,
-                        avatar: student.avatar,
+                        avatar: slimMedia(student.avatar) || '/mascota-dp.png',
                         birthDate: student.birthdate,
                         weight: weightVal,
                         gender: genderVal,
@@ -2884,7 +3159,7 @@ function eventPayload(body, existing) {
         title: title || 'Evento',
         slug,
         description: body.description ?? existing?.description ?? '',
-        photo: body.photo ?? existing?.photo ?? '',
+        photo: persistMedia(body.photo ?? existing?.photo) || '',
         rules_url: body.rulesUrl ?? body.rules_url ?? existing?.rules_url ?? '',
         rules_name: body.rulesName ?? body.rules_name ?? existing?.rules_name ?? '',
         event_date: body.date ?? body.event_date ?? existing?.event_date ?? null,
@@ -2905,9 +3180,11 @@ function eventPayload(body, existing) {
     };
 }
 
-app.get('/api/events/public', async (_req, res) => {
+app.get('/api/events/public', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('events').select('*').eq('status', 'published').order('event_date', { ascending: true });
+        const academiaId = await publicAcademyId(req);
+        if (!academiaId) return res.json([]);
+        const { data, error } = await supabase.from('events').select('*').eq('academia_id', academiaId).eq('status', 'published').order('event_date', { ascending: true });
         if (error) throw error;
         const ids = (data || []).map((e) => e.id);
         let athleteCounts = {};
@@ -2936,9 +3213,11 @@ app.get('/api/events/public/:slug', async (req, res) => {
     }
 });
 
-app.get('/api/events', async (_req, res) => {
+app.get('/api/events', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
+        const academiaId = academyIdOr401(req, res);
+        if (!academiaId) return;
+        const { data, error } = await supabase.from('events').select('*').eq('academia_id', academiaId).order('created_at', { ascending: false });
         if (error) throw error;
         const ids = (data || []).map((e) => e.id);
         let counts = {};

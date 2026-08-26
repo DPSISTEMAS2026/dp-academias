@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Belt, Student, Video } from './types';
 import PanelTabs from './PanelTabs';
+import { uploadAcademyFile } from './uploadAcademyImage';
 import './LibraryPanel.css';
 import './panel-shell.css';
 
@@ -175,9 +176,23 @@ export default function LibraryPanel({ apiUrl, videos, students, onVideosChange 
                 <input type="file" accept={form.format === 'document' ? '.pdf,image/*' : 'video/*,image/*'} onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  if (file.type.startsWith('image/')) {
+                    try {
+                      const url = await uploadAcademyFile(apiUrl, file);
+                      setForm((f) => ({ ...f, url, duration: f.format === 'document' ? 'PDF' : f.duration }));
+                    } catch (err: any) {
+                      setHint(err?.message || 'No se pudo subir la imagen.');
+                    }
+                    return;
+                  }
+                  if (file.type.startsWith('video/')) {
+                    setHint('No subas el video al servidor. Pega un enlace de YouTube.');
+                    return;
+                  }
                   const res = await fetch(`${apiUrl}/api/upload`, { method: 'POST', headers: { 'X-Filename': file.name }, body: file });
-                  const data = await res.json();
+                  const data = await res.json().catch(() => ({}));
                   if (res.ok) setForm((f) => ({ ...f, url: data.url, duration: f.format === 'document' ? 'PDF' : f.duration }));
+                  else setHint(data.error || 'No se pudo subir el archivo.');
                 }} />
               </label>
             </div>

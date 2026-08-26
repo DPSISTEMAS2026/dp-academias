@@ -100,41 +100,63 @@ export function internalKeyOk(req) {
   return got === expected;
 }
 
+const ACADEMY_COLS = 'id, slug, name, logo_url, color, custom_domain, status';
+
 export function demoAcademySlug() {
-  return String(process.env.DEMO_ACADEMY_SLUG || 'dpdemo').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  return String(process.env.DEMO_ACADEMY_SLUG || 'dpdemo').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'dpdemo';
+}
+
+async function fetchAcademyBySlug(supabase, slug) {
+  if (!slug) return { data: null, error: null };
+  const { data, error } = await supabase
+    .from('academias')
+    .select(ACADEMY_COLS)
+    .eq('slug', String(slug).toLowerCase())
+    .maybeSingle();
+  if (error) console.error('[ACADEMY] slug', slug, error.message);
+  return { data: data || null, error };
 }
 
 export async function academyByHostOrSlug(supabase, req, slugFromBody) {
   const host = requestHost(req);
   const slug = slugFromBody || slugFromLocalHost(host);
   if (slug) {
-    const { data } = await supabase.from('academias').select('*').eq('slug', String(slug).toLowerCase()).maybeSingle();
+    const { data } = await fetchAcademyBySlug(supabase, slug);
     if (data) return data;
   }
   if (!host || isDpMarketingHost(host)) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('academias')
-    .select('*')
+    .select(ACADEMY_COLS)
     .or(`custom_domain.eq.${host},slug.eq.${host}`)
     .maybeSingle();
+  if (error) console.error('[ACADEMY] host', host, error.message);
   return data || null;
 }
 
 /**
  * Login:
  * - tuacademia.cl → esa academia (custom_domain)
- * - academias.dpsistemas.cl / localhost → academia demo (slug dpdemo)
+ * - academias.dpsistemas.cl / localhost → academia demo (slug dpdemo, o la primera si falta el slug)
  */
 export async function academyForLogin(supabase, req, { slug } = {}) {
   const host = requestHost(req);
   const direct = await academyByHostOrSlug(supabase, req, slug);
   if (direct) return { academy: direct, via: slug ? 'slug' : 'host', ids: [Number(direct.id)] };
 
-  if (isDpMarketingHost(host)) {
-    const { data } = await supabase.from('academias').select('*').eq('slug', demoAcademySlug()).maybeSingle();
-    return { academy: data || null, via: 'demo', ids: data ? [Number(data.id)] : [] };
-  }
-  return { academy: null, via: 'none', ids: [] };
+  if (!isDpMarketingHost(host)) return { academy: null, via: 'none', ids: [] };
+
+  const demo = await fetchAcademyBySlug(supabase, demoAcademySlug());
+  if (demo.data) return { academy: demo.data, via: 'demo', ids: [Number(demo.data.id)] };
+
+  const { data: rows, error } = await supabase
+    .from('academias')
+    .select(ACADEMY_COLS)
+    .order('id', { ascending: true })
+    .limit(1);
+  if (error) console.error('[ACADEMY] first', error.message);
+  const first = rows && rows[0] ? rows[0] : null;
+  return { academy: first, via: first ? 'first' : 'none', ids: first ? [Number(first.id)] : [] };
 }
 
 export function tenantId(req) {

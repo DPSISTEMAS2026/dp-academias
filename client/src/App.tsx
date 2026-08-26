@@ -1386,7 +1386,7 @@ const App: React.FC = () => {
         body: JSON.stringify({
           email: authEmail,
           password: authPassword,
-          slug: publicAcademy?.slug || localStorage.getItem('academiaSlug') || undefined,
+          slug: publicAcademy?.slug || undefined,
         })
       });
       const data = await response.json();

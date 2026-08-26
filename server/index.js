@@ -15,6 +15,7 @@ import {
     signToken,
     academyByHostOrSlug,
     academyForLogin,
+    demoAcademySlug,
     tenantId,
     sedeQueryAllowed,
     internalKeyOk,
@@ -1684,8 +1685,25 @@ app.post('/api/recover-password', async (req, res) => {
 });
 
 // Health check endpoint (for self-ping keep-alive)
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    let supabaseHost = 'missing';
+    try { supabaseHost = new URL(supabaseUrl).host; } catch { /* ignore */ }
+    const slug = demoAcademySlug();
+    const { data, error, count } = await supabase.from('academias').select('id, slug', { count: 'exact' }).limit(5);
+    const demo = (data || []).find((row) => row.slug === slug) || (data || [])[0] || null;
+    res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        demo: {
+            slug,
+            found: Boolean(demo),
+            academySlug: demo?.slug || null,
+            academias: typeof count === 'number' ? count : (data || []).length,
+            error: error?.message || null,
+        },
+        supabaseHost,
+    });
 });
 
 // Mercado Pago: Webhook

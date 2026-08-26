@@ -55,19 +55,5 @@ alter table public.academias add column if not exists max_storage_bytes bigint d
 alter table public.admins add column if not exists access_until timestamptz;
 alter table public.students add column if not exists access_until timestamptz;
 
--- Esta base no guarda el seed de la vitrina.
-truncate table
-  public.event_registrations,
-  public.attendance,
-  public.material_progress,
-  public.demo_clicks,
-  public.students,
-  public.gallery,
-  public.news,
-  public.videos,
-  public.class_slots,
-  public.events,
-  public.admins,
-  public.sedes,
-  public.academias
-restart identity cascade;
+alter table public.admins add column if not exists access_until timestamptz;
+alter table public.students add column if not exists access_until timestamptz;

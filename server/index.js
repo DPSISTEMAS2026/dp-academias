@@ -30,10 +30,12 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, '../.env'), override: true });
 
-const FORBIDDEN_SUPABASE = ['qbimxygcjjmosifsqbko', 'xtcxbxvbtxnmuaylrhmr'];
+const FORBIDDEN_SUPABASE = ['qbimxygcjjmosifsqbko', 'xtcxbxvbtxnmuaylrhmr', 'prihphytqvpkrrwptali'];
+const PRODUCT_SUPABASE = 'ydbefwfqkimznydpybss';
 const supabaseUrl = process.env.SUPABASE_URL || '';
-if (FORBIDDEN_SUPABASE.some((id) => supabaseUrl.includes(id))) {
-    console.error('REFUSING TO START: SUPABASE_URL apunta a Ranas (producción o backup). Usa el proyecto demo.');
+if (FORBIDDEN_SUPABASE.some((id) => supabaseUrl.includes(id)) || (supabaseUrl && !supabaseUrl.includes(PRODUCT_SUPABASE))) {
+    console.error('REFUSING TO START: SUPABASE_URL no es el proyecto de producto ydbefwfqkimznydpybss.');
+    console.error('En Render: SUPABASE_URL=https://ydbefwfqkimznydpybss.supabase.co y la anon key de ese proyecto.');
     process.exit(1);
 }
 
@@ -2892,11 +2894,12 @@ app.post('/api/auth/login', async (req, res) => {
             .from('admins')
             .select('*')
             .eq('academia_id', academy.id)
-            .eq('email', lowerEmail)
+            .ilike('email', lowerEmail)
             .maybeSingle();
 
         if (!error && admin) {
-            if (admin.password_hash === trimmedPass) {
+            const stored = String(admin.password_hash || '').trim();
+            if (stored && stored === trimmedPass) {
                 const blocked = demoAccessBlocked(admin);
                 if (blocked) return res.status(401).json({ success: false, error: blocked });
                 const token = signToken({

@@ -20,7 +20,6 @@ import {
   founderConsultMessage,
   founderPlanEnabled,
   founderPlanPrices,
-  founderSlotsTotal,
   type BillingCycle,
 } from './founderPlan';
 import './FounderPlanSection.css';
@@ -35,7 +34,7 @@ const INCLUDES = [
   { icon: Headphones, text: 'Soporte y actualizaciones.' },
   { icon: GraduationCap, text: 'Implementación incluida.' },
   { icon: Wallet, text: 'Sin pago inicial.' },
-  { icon: InfinityIcon, text: 'Sin cobros por cantidad de alumnos dentro del Plan Fundador.' },
+  { icon: InfinityIcon, text: 'Sin cobros por cantidad de alumnos dentro del Plan Academia.' },
 ];
 
 type Props = {
@@ -86,7 +85,7 @@ export default function FounderPlanSection({ onLogin }: Props) {
           <div className="dp-kicker">Planes y precios</div>
           <h2 id="dp-plans-title">Un plan claro para comenzar</h2>
           <p className="dp-lead">
-            Estamos creciendo junto a nuestras primeras academias. Por eso creamos el Plan Fundador: una propuesta especial de lanzamiento que incluye la implementación, la página web y toda la plataforma de gestión.
+            Estamos creciendo junto a nuestras primeras academias. Por eso creamos el Plan Academia: una propuesta especial de lanzamiento que incluye la implementación, la página web y toda la plataforma de gestión.
           </p>
         </header>
 
@@ -122,17 +121,12 @@ export default function FounderPlanSection({ onLogin }: Props) {
               <div className="dp-plan-brand">
                 <img src={BRAND.logoLight} alt="DP Sistemas y Automatizaciones" />
                 <div>
-                  <div className="dp-plan-label">Plan Fundador</div>
+                  <div className="dp-plan-label">Plan Academia</div>
                   {founderPlanEnabled ? (
-                    <p className="dp-plan-slots">{founderSlotsTotal} cupos de lanzamiento</p>
+                    <p className="dp-plan-slots">Cupos limitados</p>
                   ) : null}
                 </div>
               </div>
-              {founderPlanEnabled ? (
-                <p className="dp-plan-slots-copy">
-                  Disponible para las primeras {founderSlotsTotal} academias que activen su suscripción.
-                </p>
-              ) : null}
             </div>
 
             <h3>Web + plataforma de gestión para tu academia</h3>

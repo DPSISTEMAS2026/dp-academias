@@ -61,4 +61,4 @@ export function cycleBadge(id: BillingCycle) {
 export const studentSoftCap = 120;
 
 export const founderConsultMessage =
-  'Hola, mi academia necesita algo diferente al Plan Fundador. Conversemos.';
+  'Hola, mi academia necesita algo diferente al Plan Academia. Conversemos.';

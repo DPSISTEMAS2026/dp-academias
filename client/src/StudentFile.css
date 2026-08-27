@@ -170,8 +170,11 @@
 
 .sf-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 1.2rem 1.4rem 1.4rem;
+  touch-action: pan-y;
 }
 
 .sf-grid {

@@ -2791,7 +2791,7 @@ const App: React.FC = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      style={{ background: 'var(--panel-bg)', minHeight: '100vh', display: 'flex', color: 'var(--panel-text)', overflow: 'hidden' }}>
+      style={{ background: 'var(--panel-bg)', height: '100dvh', minHeight: 0, display: 'flex', color: 'var(--panel-text)', overflow: 'hidden' }}>
 
 
       {/* BG */}
@@ -2804,7 +2804,7 @@ const App: React.FC = () => {
       {/* Sidebar */}
       <motion.nav
         initial={{ x: -350, opacity: 0 }}
-        animate={{ x: isMobile ? (isMobileMenuOpen ? 0 : -500) : 0, opacity: 1 }}
+        animate={{ x: isMobile ? (isMobileMenuOpen ? 0 : '-110%') : 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className={`sidebar ${isMobileMenuOpen ? 'sidebar-open' : ''}`}
         style={{
@@ -2814,7 +2814,8 @@ const App: React.FC = () => {
           background: '#fff',
           borderRight: '1px solid rgba(22, 22, 22, 0.08)',
           overflow: 'hidden',
-          padding: 0
+          padding: 0,
+          pointerEvents: isMobile && !isMobileMenuOpen ? 'none' : 'auto',
         }}
       >
         {/* ── ZONA 1: Header fijo (nunca scrollea) ── */}
@@ -2912,7 +2913,7 @@ const App: React.FC = () => {
       </motion.nav>
 
       {/* Main content */}
-      <main className="main-content" style={{ flex: 1, padding: isMobile ? '1.5rem 1rem' : '2.5rem 3rem', position: 'relative', zIndex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+      <main className="main-content" style={{ flex: 1, minHeight: 0, padding: isMobile ? '1.5rem 1rem' : '2.5rem 3rem', position: 'relative', zIndex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {/* Header */}
         <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
@@ -2981,7 +2982,7 @@ const App: React.FC = () => {
 
 
           {activeTab === 'students' && (
-            <div key="students">
+            <div key="students" style={{ paddingBottom: isMobile ? '7rem' : 0, touchAction: 'pan-y' }}>
               <section className="dp-card" style={{ marginBottom: '1rem' }}>
                 <div className="dp-head">
                   <div>
@@ -3150,7 +3151,7 @@ const App: React.FC = () => {
               ) : (
                 /* DESKTOP: Full table */
                 <div style={{ borderRadius: '1.5rem', overflow: 'hidden', border: '1px solid var(--panel-border)', background: 'var(--panel-card)' }}>
-                  <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <div style={{ width: "100%", overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}><table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: 'rgba(5, 168, 106, 0.05)', borderBottom: '1px solid var(--glass-border)' }}>
                         <th style={{ padding: '1.5rem', fontSize: '0.7rem', fontWeight: 900, color: 'var(--logo-green)', letterSpacing: '0.1em' }}>ALUMNO</th>

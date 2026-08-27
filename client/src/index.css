@@ -338,11 +338,11 @@ section {
 /* Dashboard Core */
 .main-content {
   flex: 1;
+  min-height: 0;
   padding: 4rem 8% !important;
   background: var(--bg-subtle);
   margin-left: 268px;
   /* Space for fixed sidebar on desktop */
-  min-height: 100vh;
 }
 
 .grid-layout {
@@ -763,7 +763,5 @@ section {
 html.modal-open,
 body.modal-open {
   overflow: hidden !important;
-  touch-action: none !important;
-  overscroll-behavior: none !important;
 }
 

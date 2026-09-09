@@ -33,7 +33,9 @@ ChatGPT Image *
 /CELULAR/
 
 # Cursor
-.cursor/
+.cursor/*
+!.cursor/environment.json
+!.cursor/setup-env.sh
 
 # Local demo uploads
 server/data/uploads/

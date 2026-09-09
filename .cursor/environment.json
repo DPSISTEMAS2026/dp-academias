@@ -1,0 +1,20 @@
+{
+  "name": "DP Academias",
+  "install": "bash .cursor/setup-env.sh",
+  "terminals": [
+    {
+      "name": "API",
+      "command": "npm run dev-server",
+      "description": "Backend Express API (puerto 3002). Necesita SUPABASE_ANON_KEY y JWT_SECRET en Secrets."
+    },
+    {
+      "name": "Client",
+      "command": "npm run dev-client",
+      "description": "Frontend React + Vite (puerto 5173)."
+    }
+  ],
+  "ports": [
+    { "name": "api", "port": 3002 },
+    { "name": "client", "port": 5173 }
+  ]
+}
